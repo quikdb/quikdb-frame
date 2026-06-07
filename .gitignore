@@ -1,0 +1,41 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+/quikdb-frame
+
+# Go
+/vendor/
+go.sum
+
+# Node (web service build only)
+node_modules/
+dist/
+.vite/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Test
+coverage.out
+coverage.html
+*.test
+
+# Build
+/build/
+/tmp/

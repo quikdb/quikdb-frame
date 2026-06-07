@@ -1,0 +1,7 @@
+{
+  "name": "hello-world-web",
+  "type": "web",
+  "buildCommand": "npm run build && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags='-s -w' -o fileserver server.go",
+  "startCommand": "./fileserver",
+  "envVars": {}
+}

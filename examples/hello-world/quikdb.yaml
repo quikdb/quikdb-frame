@@ -1,0 +1,26 @@
+name: hello-world
+version: 1.0.0
+
+services:
+  api:
+    type: api
+    path: services/api
+    port: 8080
+    routes:
+      - /api/*
+    env:
+      - PORT
+
+  web:
+    type: web
+    path: services/web
+    port: 3000
+    routes:
+      - /*
+    env:
+      - API_URL
+
+routing:
+  rules:
+    - path: /api/*    service: api
+    - path: /*        service: web
