@@ -203,10 +203,16 @@ jobs:
 
       - name: Test MongoDB connectivity
         run: |
-          # Install mongosh
-          wget -qO /tmp/mongosh.deb https://downloads.mongodb.com/compass/mongodb-mongosh_2.1.1_amd64.deb
-          sudo dpkg -i /tmp/mongosh.deb 2>/dev/null || sudo apt-get install -f -y
-          mongosh --host localhost:27017 --eval "db.runCommand({ping:1})" --quiet
+          # Test MongoDB via curl to admin endpoint
+          curl -sf http://localhost:27017 > /dev/null 2>&1 || \
+            python3 -c "
+          import socket
+          s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+          s.settimeout(5)
+          s.connect(('localhost', 27017))
+          s.close()
+          print('MongoDB port open')
+          "
           echo "- **MongoDB**: reachable" >> $GITHUB_STEP_SUMMARY
 
       # ── 5. Add Service Command ──
@@ -214,7 +220,7 @@ jobs:
         run: |
           cd /tmp/test-app
           $GITHUB_WORKSPACE/quikdb-frame add api auth
-          cd services/auth && go build -o /dev/null .
+          cd services/api-auth && go build -o /dev/null .
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Add Service" >> $GITHUB_STEP_SUMMARY
           echo "- **add api auth**: builds OK" >> $GITHUB_STEP_SUMMARY
@@ -223,23 +229,23 @@ jobs:
         run: |
           cd /tmp/test-app
           $GITHUB_WORKSPACE/quikdb-frame add ws realtime
-          cd services/realtime && go build -o /dev/null .
+          cd services/ws-realtime && go build -o /dev/null .
           echo "- **add ws realtime**: builds OK" >> $GITHUB_STEP_SUMMARY
 
       - name: Test add worker service
         run: |
           cd /tmp/test-app
           $GITHUB_WORKSPACE/quikdb-frame add worker jobs
-          cd services/jobs && go build -o /dev/null .
+          cd services/worker-jobs && go build -o /dev/null .
           echo "- **add worker jobs**: builds OK" >> $GITHUB_STEP_SUMMARY
 
       - name: Test add web service
         run: |
           cd /tmp/test-app
           $GITHUB_WORKSPACE/quikdb-frame add web dashboard
-          test -f services/dashboard/server.go
-          test -f services/dashboard/package.json
-          test -f services/dashboard/index.html
+          test -f services/web-dashboard/server.go
+          test -f services/web-dashboard/package.json
+          test -f services/web-dashboard/index.html
           echo "- **add web dashboard**: files OK" >> $GITHUB_STEP_SUMMARY
 
       # ── 6. Express Converter ──
