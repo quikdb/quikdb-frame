@@ -68,13 +68,14 @@ func Init(name, dbType string) error {
 		".github/copilot-instructions.md":   copilotInstructions,
 	}
 
+	baseName := filepath.Base(name)
 	for path, fn := range files {
 		fullPath := filepath.Join(name, path)
 		dir := filepath.Dir(fullPath)
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
-		content := fn(name, dbType)
+		content := fn(baseName, dbType)
 		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", path, err)
 		}
