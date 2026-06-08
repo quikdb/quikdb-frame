@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/quikdb/quikdb-frame/internal/convert"
+	"github.com/quikdb/quikdb-frame/internal/deploy"
 	"github.com/quikdb/quikdb-frame/internal/dev"
 	"github.com/quikdb/quikdb-frame/internal/scaffold"
 )
@@ -65,7 +66,37 @@ func main() {
 		if len(os.Args) >= 3 {
 			svcName = os.Args[2]
 		}
-		if err := deploy(svcName); err != nil {
+		if err := deploy.Run(svcName); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "login":
+		token := ""
+		for i, arg := range os.Args {
+			if arg == "--token" && i+1 < len(os.Args) {
+				token = os.Args[i+1]
+			}
+		}
+		var err error
+		if token != "" {
+			err = deploy.LoginWithToken(token)
+		} else {
+			err = deploy.Login()
+		}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "logout":
+		if err := deploy.Logout(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "status":
+		if err := deploy.Status(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -104,28 +135,6 @@ func main() {
 	}
 }
 
-func deploy(svcName string) error {
-	// Read quikdb.yaml, build Docker images, push to QuikDB Compute
-	if svcName != "" {
-		fmt.Printf("Deploying service: %s\n", svcName)
-	} else {
-		fmt.Println("Deploying all services...")
-	}
-
-	// Check quikdb.yaml exists
-	if _, err := os.Stat("quikdb.yaml"); os.IsNotExist(err) {
-		return fmt.Errorf("quikdb.yaml not found. Are you in a quikdb-frame project?")
-	}
-
-	fmt.Println("")
-	fmt.Println("Deploy requires Docker and the QuikDB CLI.")
-	fmt.Println("Run: quikdb deploy")
-	fmt.Println("")
-	fmt.Println("quikdb-frame generates the Dockerfiles and quikdb.json files.")
-	fmt.Println("The QuikDB CLI handles the actual deployment to Compute.")
-	return nil
-}
-
 func printUsage() {
 	fmt.Printf(`quikdb-frame v%s — The operating system for QuikDB applications.
 
@@ -136,7 +145,11 @@ Commands:
   init <name>              Create a new project
   add <type> <name>        Add a service (api, ws, worker, web)
   dev [service]            Run services locally with hot reload
+  login                    Log in to QuikDB Compute
+  login --token <token>    Log in with an API token
+  logout                   Log out
   deploy [service]         Deploy to QuikDB Compute
+  status                   Show deployment status
   convert <path> --from <framework>  Convert existing project
   version                  Print version
   help                     Print this help
@@ -144,16 +157,15 @@ Commands:
 Options for init:
   --db <type>              Database type: postgres, mongo, mysql, sqlite (default: postgres)
 
-Examples:
-  quikdb-frame init my-app
-  quikdb-frame init my-app --db mongo
-  quikdb-frame add api payments
-  quikdb-frame add ws chat
-  quikdb-frame add worker email
-  quikdb-frame dev
-  quikdb-frame dev api
-  quikdb-frame deploy
-  quikdb-frame convert ./my-express-app --from express
+Workflow:
+  quikdb-frame init my-app          # create project
+  cd my-app
+  quikdb-frame dev                  # develop locally
+  git init && git add . && git commit -m "init"
+  gh repo create --public --push    # push to GitHub
+  quikdb-frame login                # log in to QuikDB
+  quikdb-frame deploy               # deploy to Compute
+  quikdb-frame status               # check deployment
 
 `, version)
 }
