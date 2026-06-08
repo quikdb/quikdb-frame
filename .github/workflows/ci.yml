@@ -1,0 +1,367 @@
+name: CI — Build, Test & Benchmark
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      mongo:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # ── 1. Build CLI ──
+      - name: Build CLI binary
+        run: |
+          go build -ldflags="-s -w" -o quikdb-frame ./cmd/quikdb-frame
+          echo "## CLI Binary" >> $GITHUB_STEP_SUMMARY
+          SIZE=$(ls -lh quikdb-frame | awk '{print $5}')
+          SIZE_BYTES=$(stat --printf="%s" quikdb-frame)
+          echo "- **Size**: $SIZE" >> $GITHUB_STEP_SUMMARY
+          echo "cli_size_bytes=$SIZE_BYTES" >> $GITHUB_ENV
+
+      - name: CLI startup time
+        run: |
+          START=$(date +%s%N)
+          ./quikdb-frame version
+          END=$(date +%s%N)
+          MS=$(( (END - START) / 1000000 ))
+          echo "- **Startup**: ${MS}ms" >> $GITHUB_STEP_SUMMARY
+
+      # ── 2. Scaffold Project ──
+      - name: Scaffold project (postgres)
+        run: |
+          START=$(date +%s%N)
+          ./quikdb-frame init /tmp/test-app
+          END=$(date +%s%N)
+          MS=$(( (END - START) / 1000000 ))
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Project Scaffolding" >> $GITHUB_STEP_SUMMARY
+          echo "- **Init time**: ${MS}ms" >> $GITHUB_STEP_SUMMARY
+          FILE_COUNT=$(find /tmp/test-app -type f | wc -l)
+          echo "- **Files created**: $FILE_COUNT" >> $GITHUB_STEP_SUMMARY
+
+      - name: Scaffold project (mongo)
+        run: |
+          ./quikdb-frame init /tmp/test-mongo --db mongo
+          grep -q "type: mongo" /tmp/test-mongo/quikdb.yaml
+          echo "- **Mongo variant**: OK" >> $GITHUB_STEP_SUMMARY
+
+      - name: Scaffold project (mysql)
+        run: |
+          ./quikdb-frame init /tmp/test-mysql --db mysql
+          grep -q "type: mysql" /tmp/test-mysql/quikdb.yaml
+          echo "- **MySQL variant**: OK" >> $GITHUB_STEP_SUMMARY
+
+      - name: Verify file structure
+        run: |
+          cd /tmp/test-app
+          EXPECTED_FILES=(
+            "quikdb.yaml"
+            ".env.example"
+            ".gitignore"
+            "CLAUDE.md"
+            ".cursorrules"
+            ".github/copilot-instructions.md"
+            "config/database.yaml"
+            "config/ratelimit.yaml"
+            "shared/db/database.go"
+            "shared/auth/jwt.go"
+            "shared/auth/middleware.go"
+            "shared/logging/logger.go"
+            "shared/types/user.go"
+            "services/api/main.go"
+            "services/api/routes.go"
+            "services/api/health.go"
+            "services/api/hello.go"
+            "services/api/Dockerfile"
+            "services/api/quikdb.json"
+            "services/api/go.mod"
+            "services/web/server.go"
+            "services/web/go.mod"
+            "services/web/index.html"
+            "services/web/package.json"
+            "services/web/vite.config.ts"
+            "services/web/src/index.tsx"
+            "services/web/src/app.tsx"
+            "services/web/Dockerfile"
+            "services/web/quikdb.json"
+          )
+          MISSING=0
+          for f in "${EXPECTED_FILES[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "MISSING: $f"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          echo "- **Missing files**: $MISSING" >> $GITHUB_STEP_SUMMARY
+          if [ $MISSING -gt 0 ]; then exit 1; fi
+
+      # ── 3. Build API Service ──
+      - name: Build API service
+        run: |
+          cd /tmp/test-app/services/api
+          START=$(date +%s%N)
+          go build -ldflags="-s -w" -o api-server .
+          END=$(date +%s%N)
+          MS=$(( (END - START) / 1000000 ))
+          SIZE=$(ls -lh api-server | awk '{print $5}')
+          SIZE_BYTES=$(stat --printf="%s" api-server)
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## API Service" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build time**: ${MS}ms" >> $GITHUB_STEP_SUMMARY
+          echo "- **Binary size**: $SIZE" >> $GITHUB_STEP_SUMMARY
+          echo "api_size_bytes=$SIZE_BYTES" >> $GITHUB_ENV
+
+      - name: Test API endpoints
+        run: |
+          cd /tmp/test-app/services/api
+          ./api-server &
+          API_PID=$!
+          sleep 1
+
+          # Health endpoint
+          HEALTH=$(curl -sf http://localhost:8080/health)
+          echo "$HEALTH" | jq -e '.status == "ok"'
+          echo "- **GET /health**: OK" >> $GITHUB_STEP_SUMMARY
+
+          # Hello endpoint
+          HELLO=$(curl -sf http://localhost:8080/api/hello)
+          echo "$HELLO" | jq -e '.message'
+          echo "- **GET /api/hello**: OK" >> $GITHUB_STEP_SUMMARY
+
+          # Memory usage
+          RSS=$(ps -o rss= -p $API_PID | tr -d ' ')
+          MEM_MB=$((RSS / 1024))
+          echo "- **Idle memory**: ${MEM_MB}MB" >> $GITHUB_STEP_SUMMARY
+
+          kill $API_PID
+          wait $API_PID 2>/dev/null || true
+
+      - name: API cold start time
+        run: |
+          cd /tmp/test-app/services/api
+          START=$(date +%s%N)
+          ./api-server &
+          API_PID=$!
+
+          # Poll until responding (max 5s)
+          for i in $(seq 1 50); do
+            if curl -sf http://localhost:8080/health > /dev/null 2>&1; then
+              break
+            fi
+            sleep 0.1
+          done
+          END=$(date +%s%N)
+          MS=$(( (END - START) / 1000000 ))
+          echo "- **Cold start**: ${MS}ms" >> $GITHUB_STEP_SUMMARY
+
+          kill $API_PID
+          wait $API_PID 2>/dev/null || true
+
+      # ── 4. Test Database Connectivity ──
+      - name: Test Postgres connectivity
+        env:
+          DATABASE_URL: postgres://test:test@localhost:5432/testdb?sslmode=disable
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Database Connectivity" >> $GITHUB_STEP_SUMMARY
+          # Verify Postgres is reachable
+          pg_isready -h localhost -p 5432 -U test
+          echo "- **Postgres**: reachable" >> $GITHUB_STEP_SUMMARY
+
+      - name: Test MongoDB connectivity
+        run: |
+          # Install mongosh
+          wget -qO /tmp/mongosh.deb https://downloads.mongodb.com/compass/mongodb-mongosh_2.1.1_amd64.deb
+          sudo dpkg -i /tmp/mongosh.deb 2>/dev/null || sudo apt-get install -f -y
+          mongosh --host localhost:27017 --eval "db.runCommand({ping:1})" --quiet
+          echo "- **MongoDB**: reachable" >> $GITHUB_STEP_SUMMARY
+
+      # ── 5. Add Service Command ──
+      - name: Test add api service
+        run: |
+          cd /tmp/test-app
+          $GITHUB_WORKSPACE/quikdb-frame add api auth
+          cd services/auth && go build -o /dev/null .
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Add Service" >> $GITHUB_STEP_SUMMARY
+          echo "- **add api auth**: builds OK" >> $GITHUB_STEP_SUMMARY
+
+      - name: Test add ws service
+        run: |
+          cd /tmp/test-app
+          $GITHUB_WORKSPACE/quikdb-frame add ws realtime
+          cd services/realtime && go build -o /dev/null .
+          echo "- **add ws realtime**: builds OK" >> $GITHUB_STEP_SUMMARY
+
+      - name: Test add worker service
+        run: |
+          cd /tmp/test-app
+          $GITHUB_WORKSPACE/quikdb-frame add worker jobs
+          cd services/jobs && go build -o /dev/null .
+          echo "- **add worker jobs**: builds OK" >> $GITHUB_STEP_SUMMARY
+
+      - name: Test add web service
+        run: |
+          cd /tmp/test-app
+          $GITHUB_WORKSPACE/quikdb-frame add web dashboard
+          test -f services/dashboard/server.go
+          test -f services/dashboard/package.json
+          test -f services/dashboard/index.html
+          echo "- **add web dashboard**: files OK" >> $GITHUB_STEP_SUMMARY
+
+      # ── 6. Express Converter ──
+      - name: Create test Express app
+        run: |
+          mkdir -p /tmp/express-test/routes
+          cat > /tmp/express-test/app.js << 'JSEOF'
+          const express = require('express');
+          const app = express();
+          app.use(express.json());
+          app.get('/health', (req, res) => res.json({ status: 'ok' }));
+          app.get('/api/users', (req, res) => res.json([]));
+          app.post('/api/users', (req, res) => res.json({ created: true }));
+          app.get('/api/users/:id', (req, res) => res.json({ id: req.params.id }));
+          app.put('/api/users/:id', (req, res) => res.json({ updated: true }));
+          app.delete('/api/users/:id', (req, res) => res.json({ deleted: true }));
+          app.get('/api/posts', (req, res) => res.json([]));
+          app.post('/api/posts', (req, res) => res.json({ created: true }));
+          app.listen(3000);
+          JSEOF
+
+          cat > /tmp/express-test/package.json << 'PKGEOF'
+          {"name":"express-test","dependencies":{"express":"^4.18.0","mongoose":"^7.0.0"}}
+          PKGEOF
+
+          cat > /tmp/express-test/.env.example << 'ENVEOF'
+          DATABASE_URL=mongodb://localhost:27017/test
+          JWT_SECRET=secret
+          PORT=3000
+          ENVEOF
+
+      - name: Run Express converter
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Express Converter" >> $GITHUB_STEP_SUMMARY
+          ./quikdb-frame convert /tmp/express-test --from express
+
+          # Verify output
+          test -d /tmp/express-test-quikdb
+          grep -q "type: mongo" /tmp/express-test-quikdb/quikdb.yaml
+          echo "- **DB detection**: mongo (correct)" >> $GITHUB_STEP_SUMMARY
+
+          ROUTE_COUNT=$(grep -c "HandleFunc" /tmp/express-test-quikdb/services/api/routes.go || echo "0")
+          echo "- **Routes detected**: $ROUTE_COUNT" >> $GITHUB_STEP_SUMMARY
+
+          # Verify it compiles
+          cd /tmp/express-test-quikdb/services/api
+          go build -o /dev/null .
+          echo "- **Output compiles**: YES" >> $GITHUB_STEP_SUMMARY
+
+      # ── 7. Docker Image (linux/amd64) ──
+      - name: Build Docker image
+        run: |
+          cd /tmp/test-app/services/api
+          docker build --platform linux/amd64 -t quikdb-frame-test-api .
+          SIZE=$(docker images quikdb-frame-test-api --format "{{.Size}}")
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Docker" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image size**: $SIZE" >> $GITHUB_STEP_SUMMARY
+
+      - name: Test Docker container
+        run: |
+          docker run -d --name test-api -p 9090:8080 quikdb-frame-test-api
+          sleep 2
+          HEALTH=$(curl -sf http://localhost:9090/health)
+          echo "$HEALTH" | jq -e '.status == "ok"'
+          echo "- **Container health**: OK" >> $GITHUB_STEP_SUMMARY
+
+          MEM=$(docker stats test-api --no-stream --format "{{.MemUsage}}" | awk '{print $1}')
+          echo "- **Container memory**: $MEM" >> $GITHUB_STEP_SUMMARY
+
+          docker rm -f test-api
+
+      # ── 8. Load Test ──
+      - name: Install hey
+        run: go install github.com/rakyll/hey@latest
+
+      - name: Load test
+        run: |
+          cd /tmp/test-app/services/api
+          ./api-server &
+          API_PID=$!
+          sleep 1
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Load Test" >> $GITHUB_STEP_SUMMARY
+
+          # 10k requests, 100 concurrent
+          RESULT=$(hey -n 10000 -c 100 http://localhost:8080/health 2>&1)
+          RPS=$(echo "$RESULT" | grep "Requests/sec" | awk '{print $2}')
+          P99=$(echo "$RESULT" | grep "99%" | head -1 | awk '{print $2}')
+          echo "- **Requests/sec**: $RPS" >> $GITHUB_STEP_SUMMARY
+          echo "- **P99 latency**: ${P99}s" >> $GITHUB_STEP_SUMMARY
+
+          # Memory after load
+          RSS=$(ps -o rss= -p $API_PID | tr -d ' ')
+          MEM_MB=$((RSS / 1024))
+          echo "- **Memory after 10k requests**: ${MEM_MB}MB" >> $GITHUB_STEP_SUMMARY
+
+          kill $API_PID
+          wait $API_PID 2>/dev/null || true
+
+      # ── 9. Summary ──
+      - name: Print scorecard
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Scorecard" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Target | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|--------|--------|" >> $GITHUB_STEP_SUMMARY
+
+          CLI_MB=$(( ${cli_size_bytes:-0} / 1048576 ))
+          API_MB=$(( ${api_size_bytes:-0} / 1048576 ))
+
+          if [ $CLI_MB -lt 8 ]; then
+            echo "| CLI size | < 8 MB | $CLI_MB MB |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| CLI size | < 8 MB | $CLI_MB MB |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ $API_MB -lt 10 ]; then
+            echo "| API size | < 10 MB | $API_MB MB |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| API size | < 10 MB | $API_MB MB |" >> $GITHUB_STEP_SUMMARY
+          fi
