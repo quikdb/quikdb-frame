@@ -17,7 +17,9 @@ func Run(srcPath, framework string) error {
 	switch framework {
 	case "express":
 		return convertExpress(srcPath)
-	case "nestjs", "nextjs", "fastapi", "django", "flask", "gin", "fiber", "spring":
+	case "flask":
+		return convertFlask(srcPath)
+	case "nestjs", "nextjs", "fastapi", "django", "gin", "fiber", "spring":
 		return fmt.Errorf("%s converter is not yet implemented. Contributions welcome: https://github.com/quikdb/quikdb-frame/blob/main/CONTRIBUTING.md", framework)
 	default:
 		return fmt.Errorf("unknown framework: %s. Supported: express, nestjs, nextjs, fastapi, django, flask", framework)
