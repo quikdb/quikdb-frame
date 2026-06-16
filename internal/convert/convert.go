@@ -10,6 +10,13 @@ import (
 )
 
 func Run(srcPath, framework string) error {
+	// Resolve to absolute path before anything else
+	absSrc, err := filepath.Abs(srcPath)
+	if err != nil {
+		return fmt.Errorf("could not resolve path %s: %w", srcPath, err)
+	}
+	srcPath = absSrc
+
 	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
 		return fmt.Errorf("source path %s does not exist", srcPath)
 	}
@@ -27,6 +34,13 @@ func Run(srcPath, framework string) error {
 }
 
 func convertExpress(srcPath string) error {
+	// Resolve to absolute path for reliable output directory creation
+	absSrc, err := filepath.Abs(srcPath)
+	if err != nil {
+		return fmt.Errorf("could not resolve path %s: %w", srcPath, err)
+	}
+	srcPath = absSrc
+
 	fmt.Println("Scanning Express project...")
 	fmt.Println()
 

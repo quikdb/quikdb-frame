@@ -9,6 +9,13 @@ import (
 )
 
 func convertFlask(srcPath string) error {
+	// Resolve to absolute path for reliable output directory creation
+	absSrc, err := filepath.Abs(srcPath)
+	if err != nil {
+		return fmt.Errorf("could not resolve path %s: %w", srcPath, err)
+	}
+	srcPath = absSrc
+
 	fmt.Println("Scanning Flask project...")
 	fmt.Println()
 

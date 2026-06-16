@@ -310,7 +310,7 @@ func webPackageJson(name, dbType string) string {
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.9.0",
-    "vite": "^6.0.0"
+    "vite": "^5.4.0"
   }
 }
 `, name)
