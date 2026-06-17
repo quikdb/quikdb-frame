@@ -204,10 +204,16 @@ func callDeployAPI(token string, req DeployRequest) (*DeployResponse, error) {
 	if resp.StatusCode == 401 || resp.StatusCode == 403 {
 		var errResp struct {
 			Message string `json:"message"`
+			Error   string `json:"error"`
 		}
 		json.Unmarshal(respBody, &errResp)
-		if strings.Contains(errResp.Message, "Subscription") {
-			return nil, fmt.Errorf("subscription required. Visit %s/settings/subscription to upgrade", computeBase)
+		combined := strings.ToLower(errResp.Message + " " + errResp.Error)
+		if strings.Contains(combined, "subscri") || strings.Contains(combined, "upgrade") || strings.Contains(combined, "plan") {
+			msg := errResp.Message
+			if msg == "" {
+				msg = "No active subscription found."
+			}
+			return nil, fmt.Errorf("%s\nVisit %s/settings/subscription to subscribe", msg, computeBase)
 		}
 		return nil, fmt.Errorf("authentication failed. Run: quikdb-frame logout && quikdb-frame login")
 	}
