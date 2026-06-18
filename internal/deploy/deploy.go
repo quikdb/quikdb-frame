@@ -25,6 +25,7 @@ type DeployRequest struct {
 	RepositoryBranch string                 `json:"repositoryBranch"`
 	ApplicationName  string                 `json:"applicationName"`
 	CustomSubdomain  string                 `json:"customSubdomain,omitempty"`
+	Subdirectory     string                 `json:"subdirectory,omitempty"`
 	Configuration    map[string]interface{} `json:"configuration"`
 }
 
@@ -103,6 +104,7 @@ func Run(svcName string) error {
 			RepositoryURL:    repoURL,
 			RepositoryBranch: branch,
 			ApplicationName:  svc.Name,
+			Subdirectory:     fmt.Sprintf("services/%s", svc.Name),
 			Configuration:    config,
 		}
 
@@ -121,11 +123,13 @@ func Run(svcName string) error {
 
 		// 7. Poll for status
 		fmt.Println("  Waiting for deployment to go live...")
+		pollStart := time.Now()
 		finalStatus, finalURL := pollDeployment(token, resp.Data.DeploymentID)
+		elapsed := time.Since(pollStart).Round(time.Second)
 		if finalStatus == "live" {
-			fmt.Printf("  Live at: %s\n", finalURL)
+			fmt.Printf("  Live at: %s (%s)\n", finalURL, elapsed)
 		} else {
-			fmt.Printf("  Final status: %s\n", finalStatus)
+			fmt.Printf("  Final status: %s (%s)\n", finalStatus, elapsed)
 			fmt.Println("  Check the QuikDB Compute dashboard for details.")
 		}
 		fmt.Println()
