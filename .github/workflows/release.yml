@@ -1,0 +1,64 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Build binaries
+        run: |
+          mkdir -p dist
+
+          GOOS=linux   GOARCH=amd64 go build -ldflags="-s -w" -o dist/quikdb-frame-linux-amd64   ./cmd/quikdb-frame
+          GOOS=linux   GOARCH=arm64 go build -ldflags="-s -w" -o dist/quikdb-frame-linux-arm64   ./cmd/quikdb-frame
+          GOOS=darwin  GOARCH=amd64 go build -ldflags="-s -w" -o dist/quikdb-frame-darwin-amd64  ./cmd/quikdb-frame
+          GOOS=darwin  GOARCH=arm64 go build -ldflags="-s -w" -o dist/quikdb-frame-darwin-arm64  ./cmd/quikdb-frame
+          GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o dist/quikdb-frame-windows-amd64.exe ./cmd/quikdb-frame
+
+          ls -lh dist/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            **macOS (Apple Silicon)**
+            ```bash
+            curl -L https://github.com/quikdb/quikdb-frame/releases/latest/download/quikdb-frame-darwin-arm64 -o /usr/local/bin/quikdb-frame
+            chmod +x /usr/local/bin/quikdb-frame
+            ```
+
+            **macOS (Intel)**
+            ```bash
+            curl -L https://github.com/quikdb/quikdb-frame/releases/latest/download/quikdb-frame-darwin-amd64 -o /usr/local/bin/quikdb-frame
+            chmod +x /usr/local/bin/quikdb-frame
+            ```
+
+            **Linux**
+            ```bash
+            curl -L https://github.com/quikdb/quikdb-frame/releases/latest/download/quikdb-frame-linux-amd64 -o /usr/local/bin/quikdb-frame
+            chmod +x /usr/local/bin/quikdb-frame
+            ```
+
+            **Windows (PowerShell)**
+            ```powershell
+            Invoke-WebRequest -Uri https://github.com/quikdb/quikdb-frame/releases/latest/download/quikdb-frame-windows-amd64.exe -OutFile quikdb-frame.exe
+            Move-Item quikdb-frame.exe $env:USERPROFILE\quikdb-frame.exe
+            ```
