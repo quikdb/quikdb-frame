@@ -18,6 +18,7 @@ type ServiceConfig struct {
 	Type         string `json:"type"`
 	BuildCommand string `json:"buildCommand"`
 	StartCommand string `json:"startCommand"`
+	DirName      string `json:"-"` // actual directory name (always used for subdirectory path)
 }
 
 type DeployRequest struct {
@@ -104,7 +105,7 @@ func Run(svcName string) error {
 			RepositoryURL:    repoURL,
 			RepositoryBranch: branch,
 			ApplicationName:  svc.Name,
-			Subdirectory:     fmt.Sprintf("services/%s", svc.Name),
+			Subdirectory:     fmt.Sprintf("services/%s", svc.DirName),
 			Configuration:    config,
 		}
 
@@ -303,6 +304,7 @@ func findServices(svcName string) ([]ServiceConfig, error) {
 		if svc.Name == "" {
 			svc.Name = name
 		}
+		svc.DirName = name // always the actual directory name
 		services = append(services, svc)
 	}
 
