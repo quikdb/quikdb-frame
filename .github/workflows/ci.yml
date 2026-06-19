@@ -44,7 +44,7 @@ jobs:
       # ── 1. Build CLI ──
       - name: Build CLI binary
         run: |
-          go build -ldflags="-s -w" -o quikdb-frame ./cmd/quikdb-frame
+          go build -ldflags="-s -w -X main.version=ci-$(git rev-parse --short HEAD)" -o quikdb-frame ./cmd/quikdb-frame
           echo "## CLI Binary" >> $GITHUB_STEP_SUMMARY
           SIZE=$(ls -lh quikdb-frame | awk '{print $5}')
           SIZE_BYTES=$(stat --printf="%s" quikdb-frame)

@@ -10,7 +10,8 @@ import (
 	"github.com/quikdb/quikdb-frame/internal/scaffold"
 )
 
-const version = "0.1.0"
+// version is set at build time via -ldflags "-X main.version=x.y.z"
+var version = "dev"
 
 func main() {
 	if len(os.Args) < 2 {
