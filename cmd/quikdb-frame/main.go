@@ -8,6 +8,7 @@ import (
 	"github.com/quikdb/quikdb-frame/internal/deploy"
 	"github.com/quikdb/quikdb-frame/internal/dev"
 	"github.com/quikdb/quikdb-frame/internal/scaffold"
+	"github.com/quikdb/quikdb-frame/internal/upgrade"
 )
 
 // version is set at build time via -ldflags "-X main.version=x.y.z"
@@ -123,6 +124,12 @@ func main() {
 			os.Exit(1)
 		}
 
+	case "upgrade":
+		if err := upgrade.Run(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
 	case "version", "--version", "-v":
 		fmt.Printf("quikdb-frame v%s\n", version)
 
@@ -152,6 +159,7 @@ Commands:
   deploy [service]         Deploy to QuikDB Compute
   status                   Show deployment status
   convert <path> --from <framework>  Convert existing project
+  upgrade                  Upgrade to the latest version
   version                  Print version
   help                     Print this help
 
