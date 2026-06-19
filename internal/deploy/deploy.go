@@ -50,6 +50,12 @@ type DeployStatusResponse struct {
 	} `json:"data"`
 }
 
+type ExistingDeployment struct {
+	DeploymentID string
+	Status       string
+	PublicURL    string
+}
+
 // Run deploys one or all services to QuikDB Compute.
 func Run(svcName string) error {
 	// 1. Check we're in a quikdb-frame project
@@ -81,11 +87,49 @@ func Run(svcName string) error {
 		return err
 	}
 
+	// Check 1 & 2: Fetch existing deployments and warn on container count
+	existing := fetchExistingDeployments(token)
+	liveCount := 0
+	for _, d := range existing {
+		if d.Status == "live" || d.Status == "building" || d.Status == "deploying" {
+			liveCount++
+		}
+	}
+	newServices := 0
+	for _, svc := range services {
+		if _, found := existing[svc.Name]; !found {
+			newServices++
+		}
+	}
+	if newServices > 0 && liveCount+newServices > 3 {
+		fmt.Printf("Warning: You have %d live deployment(s) and are adding %d more (%d total).\n", liveCount, newServices, liveCount+newServices)
+		fmt.Println("Your plan may limit the number of containers. Check compute.quikdb.com/settings if deploys are rejected.")
+		fmt.Println()
+	}
+
 	fmt.Printf("Deploying %d service(s) from %s (%s)\n\n", len(services), repoURL, branch)
 
 	// 6. Deploy each service
 	for _, svc := range services {
-		fmt.Printf("Deploying %s...\n", svc.Name)
+		// Check 1: skip or retry based on existing deployment state
+		if dep, found := existing[svc.Name]; found {
+			switch dep.Status {
+			case "live", "building", "deploying":
+				url := dep.PublicURL
+				if url == "" {
+					url = "compute.quikdb.com"
+				}
+				fmt.Printf("%-20s  already %s at %s\n", svc.Name, dep.Status, url)
+				fmt.Printf("%-20s  Push to %s to redeploy.\n\n", "", branch)
+				continue
+			case "failed":
+				fmt.Printf("Redeploying %s (previous deploy failed)...\n", svc.Name)
+			default:
+				fmt.Printf("Deploying %s...\n", svc.Name)
+			}
+		} else {
+			fmt.Printf("Deploying %s...\n", svc.Name)
+		}
 
 		config := map[string]interface{}{
 			"appType":      mapServiceType(svc.Type),
@@ -122,7 +166,7 @@ func Run(svcName string) error {
 		}
 		fmt.Println()
 
-		// 7. Poll for status
+		// Poll for status
 		fmt.Println("  Waiting for deployment to go live...")
 		pollStart := time.Now()
 		finalStatus, finalURL := pollDeployment(token, resp.Data.DeploymentID)
@@ -224,7 +268,7 @@ func callDeployAPI(token string, req DeployRequest) (*DeployResponse, error) {
 	}
 
 	if resp.StatusCode == 409 {
-		return nil, fmt.Errorf("deployment already in progress or subdomain taken")
+		return nil, fmt.Errorf("a deployment with this name already exists.\nIf it's already live, push your changes to GitHub to redeploy automatically.\nOr delete it from the dashboard first: %s", computeBase)
 	}
 
 	if resp.StatusCode == 429 {
@@ -273,6 +317,40 @@ func pollDeployment(token, deploymentID string) (string, string) {
 		}
 	}
 	return "timeout", ""
+}
+
+// fetchExistingDeployments returns a map of applicationName → ExistingDeployment.
+// If the request fails, returns an empty map (non-fatal).
+func fetchExistingDeployments(token string) map[string]ExistingDeployment {
+	req, _ := http.NewRequest("GET", apiBase+"/api/v1/deployment/list", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return map[string]ExistingDeployment{}
+	}
+	defer resp.Body.Close()
+	body, _ := io.ReadAll(resp.Body)
+
+	var result struct {
+		Success bool `json:"success"`
+		Data    []struct {
+			DeploymentID    string `json:"deploymentId"`
+			ApplicationName string `json:"applicationName"`
+			Status          string `json:"status"`
+			PublicURL       string `json:"publicUrl"`
+		} `json:"data"`
+	}
+	json.Unmarshal(body, &result)
+
+	out := make(map[string]ExistingDeployment)
+	for _, d := range result.Data {
+		out[d.ApplicationName] = ExistingDeployment{
+			DeploymentID: d.DeploymentID,
+			Status:       d.Status,
+			PublicURL:    d.PublicURL,
+		}
+	}
+	return out
 }
 
 func findServices(svcName string) ([]ServiceConfig, error) {
