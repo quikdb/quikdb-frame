@@ -34,11 +34,22 @@ func Run() error {
 		return fmt.Errorf("could not make binary executable: %w", err)
 	}
 
-	// Replace current binary
-	if err := os.Rename(tmp, self); err != nil {
+	// Replace current binary.
+	// On Windows, a running executable cannot be overwritten directly.
+	// Move the old binary aside first, then move the new one into place.
+	old := self + ".old"
+	os.Remove(old) // clean up any previous failed upgrade
+	if err := os.Rename(self, old); err != nil {
 		os.Remove(tmp)
-		return fmt.Errorf("could not replace binary (try running as administrator): %w", err)
+		return fmt.Errorf("could not move current binary (try running as administrator): %w", err)
 	}
+	if err := os.Rename(tmp, self); err != nil {
+		// Restore old binary before giving up
+		os.Rename(old, self)
+		os.Remove(tmp)
+		return fmt.Errorf("could not install new binary: %w", err)
+	}
+	os.Remove(old)
 
 	fmt.Println("Upgraded successfully. Run 'quikdb-frame version' to confirm.")
 	return nil
