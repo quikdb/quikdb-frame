@@ -31,7 +31,7 @@ A full quikdb-frame app (4 API services, 1 web, 2 WebSocket, 2 workers) uses les
 
 ```bash
 # Install the CLI
-npm install -g quikdb-frame
+go install github.com/quikdb/quikdb-frame/cmd/quikdb-frame@latest
 
 # Create a new project
 quikdb-frame init my-app
@@ -39,9 +39,11 @@ quikdb-frame init my-app
 # Run locally with hot reload
 cd my-app && quikdb-frame dev
 
-# Deploy to QuikDB Compute
+# Push to GitHub first, then deploy to QuikDB Compute
 quikdb-frame deploy
 ```
+
+> **Note:** `quikdb-frame deploy` is for **first-time deploys only**. Once your services are live, push to your main branch — QuikDB Compute auto-redeploys on every push. Running `quikdb-frame deploy` again on an existing project will be skipped for services that are already live.
 
 ## How It Works
 
