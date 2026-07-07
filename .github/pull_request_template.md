@@ -1,28 +1,14 @@
-## What
+## Summary
+<!-- What does this PR do? Be specific. -->
 
-Brief description of the change.
+## Linked Issue
+Fixes #<!-- issue number — preferred path for payout eligibility -->
 
-## Why
+<!-- No linked issue? Leave the line above blank and submit your PR at https://app.quikdb.com/earnings/tasks after it is merged. -->
 
-Why is this change needed?
-
-## Type
-
-- [ ] New adapter
-- [ ] New converter plugin
-- [ ] New template
-- [ ] Bug fix
-- [ ] CLI improvement
-- [ ] Documentation
-- [ ] Other
+## Testing
+<!-- How did you test this? Screenshots, logs, or steps are helpful. -->
 
 ## Checklist
-
-- [ ] Tests pass (`go test ./...`)
-- [ ] New code has tests
-- [ ] Adapters implement the required interface
-- [ ] No breaking changes (or noted below)
-
-## Breaking Changes
-
-List any breaking changes, or write "None".
+- [ ] I have tested this change locally
+- [ ] I have linked the relevant GitHub issue above (required for automatic payout)
