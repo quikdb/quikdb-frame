@@ -12,6 +12,10 @@ func Add(svcType, svcName string) error {
 		return fmt.Errorf("quikdb.yaml not found. Are you in a quikdb-frame project?")
 	}
 
+	if err := validateName(svcName, "service name"); err != nil {
+		return err
+	}
+
 	fullName := svcType + "-" + svcName
 	if svcType == "web" {
 		fullName = "web-" + svcName
