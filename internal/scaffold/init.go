@@ -7,6 +7,10 @@ import (
 )
 
 func Init(name, dbType string) error {
+	if err := validateName(name, "project name"); err != nil {
+		return err
+	}
+
 	if _, err := os.Stat(name); err == nil {
 		return fmt.Errorf("directory %s already exists", name)
 	}
