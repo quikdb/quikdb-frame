@@ -74,12 +74,18 @@ func main() {
 		}
 
 	case "login":
-		token := ""
+		// Prefer QUIKDB_TOKEN env var — safe for CI/CD, not visible in ps aux or shell history
+		token := os.Getenv("QUIKDB_TOKEN")
+
+		// Also accept --token flag for convenience, but warn about exposure risk
 		for i, arg := range os.Args {
 			if arg == "--token" && i+1 < len(os.Args) {
 				token = os.Args[i+1]
+				fmt.Fprintln(os.Stderr, "Warning: --token flag exposes the token in process list (ps aux) and shell history.")
+				fmt.Fprintln(os.Stderr, "         Use the QUIKDB_TOKEN environment variable instead for better security.")
 			}
 		}
+
 		var err error
 		if token != "" {
 			err = deploy.LoginWithToken(token)
@@ -154,7 +160,7 @@ Commands:
   add <type> <name>        Add a service (api, ws, worker, web)
   dev [service]            Run services locally with hot reload
   login                    Log in to QuikDB Compute
-  login --token <token>    Log in with an API token
+  login --token <token>    Log in with an API token (see warning below)
   logout                   Log out
   deploy [service]         Deploy to QuikDB Compute
   status                   Show deployment status
@@ -165,6 +171,11 @@ Commands:
 
 Options for init:
   --db <type>              Database type: postgres, mongo, mysql, sqlite (default: postgres)
+
+Security:
+  QUIKDB_TOKEN             Set this environment variable instead of --token to avoid exposing
+                           the token in process lists (ps aux) and shell history.
+                           Example: QUIKDB_TOKEN=<token> quikdb-frame login
 
 Workflow:
   quikdb-frame init my-app          # create project
