@@ -200,6 +200,8 @@ func TestArchiveCommandUploadsOnlyAfterAccountPreflightThenCreatesByHandle(t *te
 		switch r.URL.Path {
 		case "/api/v1/deployment/list":
 			fmt.Fprint(w, `{"success":true,"data":[]}`)
+		case "/api/v1/deployment/source-capabilities":
+			fmt.Fprint(w, `{"success":true,"data":{"archiveDeployment":true}}`)
 		case "/api/v1/deployment/sources":
 			bytes, _ := io.ReadAll(r.Body)
 			hash := sha256.Sum256(bytes)
@@ -229,7 +231,7 @@ func TestArchiveCommandUploadsOnlyAfterAccountPreflightThenCreatesByHandle(t *te
 	if err := Command([]string{"--source", root, "--config", config, "--name", "fixture", "--json"}); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(calls, ",") != "/api/v1/deployment/list,/api/v1/deployment/sources,/api/v1/deployment/create,/api/v1/deployment/fixture" {
+	if strings.Join(calls, ",") != "/api/v1/deployment/list,/api/v1/deployment/source-capabilities,/api/v1/deployment/sources,/api/v1/deployment/create,/api/v1/deployment/fixture" {
 		t.Fatalf("unexpected submission order %v", calls)
 	}
 }

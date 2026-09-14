@@ -52,6 +52,13 @@ func commandArchive(o DeployOptions) error {
 	if err != nil {
 		return fmt.Errorf("deployment preflight failed: %w", err)
 	}
+	capability, err := client.request(ctx, token, "GET", "/source-capabilities", nil)
+	var available struct {
+		ArchiveDeployment bool `json:"archiveDeployment"`
+	}
+	if err != nil || json.Unmarshal(capability, &available) != nil || !available.ArchiveDeployment {
+		return fmt.Errorf("archive deployment is not active yet; use Git deployment or --dry-run to review your local archive")
+	}
 	byName := map[string]Deployment{}
 	for _, deployment := range existing {
 		if deployment.ApplicationName != o.Name {
