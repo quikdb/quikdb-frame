@@ -5,6 +5,7 @@ on:
   pull_request:
     paths:
       - internal/deploy/**
+      - internal/upgrade/**
       - cmd/quikdb-frame/**
       - .github/workflows/deployment-contracts.yml
       - .github/workflows/release.yml
