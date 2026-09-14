@@ -13,10 +13,10 @@ import (
 )
 
 const (
-	apiBase      = "https://device.quikdb.net"
-	computeBase  = "https://compute.quikdb.com"
-	configDir    = ".quikdb-frame"
-	configFile   = "auth.json"
+	apiBase     = "https://device.quikdb.net"
+	computeBase = "https://compute.quikdb.com"
+	configDir   = ".quikdb-frame"
+	configFile  = "auth.json"
 )
 
 type AuthConfig struct {
@@ -137,6 +137,9 @@ func SaveAuth(auth *AuthConfig) error {
 }
 
 func RequireAuth() (string, error) {
+	if token := os.Getenv("QUIKDB_TOKEN"); token != "" {
+		return token, nil
+	}
 	auth, err := LoadAuth()
 	if err != nil || auth.Token == "" {
 		return "", fmt.Errorf("not logged in. Run: quikdb-frame login")

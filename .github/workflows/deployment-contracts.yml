@@ -1,0 +1,34 @@
+name: Deployment Contract Validation
+on:
+  push:
+    branches: [feat/frame-deployment-contracts]
+  pull_request:
+    paths:
+      - internal/deploy/**
+      - cmd/quikdb-frame/**
+      - .github/workflows/deployment-contracts.yml
+      - .github/workflows/release.yml
+permissions:
+  contents: read
+concurrency:
+  group: frame-contracts-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: Test contracts and build CLI
+        run: |
+          go test -race ./...
+          go vet ./...
+          go build -ldflags='-s -w -X main.version=contract-ci' -o /tmp/quikdb-frame ./cmd/quikdb-frame
+          /tmp/quikdb-frame version
+          for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            GOOS=${platform%/*} GOARCH=${platform#*/} go build -o /tmp/frame-cross-build ./cmd/quikdb-frame
+          done
+          printf 'Validated commit: %s\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"

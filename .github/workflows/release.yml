@@ -19,10 +19,15 @@ jobs:
         with:
           go-version: '1.23'
 
+      - name: Validate release commit
+        run: |
+          go test -race ./...
+          go vet ./...
+
       - name: Build binaries
         run: |
           mkdir -p dist
-          VERSION=${GITHUB_REF_NAME}
+          VERSION=${GITHUB_REF_NAME#v}
           LDFLAGS="-s -w -X main.version=${VERSION}"
 
           GOOS=linux   GOARCH=amd64 go build -ldflags="$LDFLAGS" -o dist/quikdb-frame-linux-amd64   ./cmd/quikdb-frame
@@ -32,6 +37,15 @@ jobs:
           GOOS=windows GOARCH=amd64 go build -ldflags="$LDFLAGS" -o dist/quikdb-frame-windows-amd64.exe ./cmd/quikdb-frame
 
           ls -lh dist/
+
+      - name: Verify binaries and record checksums
+        run: |
+          dist/quikdb-frame-linux-amd64 version
+          cd dist
+          sha256sum quikdb-frame-* > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          printf 'Release commit: %s\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          cat SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
