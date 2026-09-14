@@ -199,7 +199,7 @@ Options for deploy (flags before service name):
   --repo <GitHub URL>      Deploy a repository without a local Frame layout
   --branch <branch>        Required with --repo; otherwise use current Git branch
   --name <name>            Application name (default: repository name)
-  --subdirectory <path>    Service root; currently requires --config
+  --subdirectory <path>    Service root; shared detection reads this directory
   --config <path>          Explicit deployment configuration JSON
   --port <port>            Actual internal application port
   --dry-run                Review source/config summary without deployment submission

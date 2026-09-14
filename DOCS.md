@@ -78,3 +78,10 @@ API e2a7145 ownership/scopes/resources deployed and portal 96d853c exact consent
 Older sessions retain deployment-only access; logout/new login explicitly approves env/domain
 access, including secret export. Actual published three-OS checks and fixture acceptance are
 recorded in the ops 08-CLI-MANAGEMENT-2026-09-14 report as they complete.
+
+## Source/settings detection (pending exact-source qualification)
+
+feat/frame-source-settings passes --subdirectory to the same owner-scoped detection API
+and rejects a returned directory mismatch. Explicit --config remains authoritative. API must
+be deployed before releasing automatic service-root detection. Immutable commit/local-source/
+cross-context Dockerfile/target and versioned shared manifest contracts remain subsequent WP2 work.

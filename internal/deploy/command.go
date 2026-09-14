@@ -188,10 +188,7 @@ func planAsIs(ctx context.Context, c *APIClient, token string, o DeployOptions) 
 			return request, fmt.Errorf("deployment configuration must be a JSON object")
 		}
 	} else {
-		if o.Subdirectory != "" {
-			return request, fmt.Errorf("repository detection currently reads the root; provide --config for this service directory")
-		}
-		data, err := c.request(ctx, token, http.MethodPost, "/detect-config", map[string]string{"repositoryUrl": o.Repo, "branch": o.Branch})
+		data, err := c.request(ctx, token, http.MethodPost, "/detect-config", map[string]string{"repositoryUrl": o.Repo, "branch": o.Branch, "subdirectory": o.Subdirectory})
 		if err != nil {
 			return request, err
 		}
@@ -199,10 +196,14 @@ func planAsIs(ctx context.Context, c *APIClient, token string, o DeployOptions) 
 			AppType        string                 `json:"appType"`
 			Framework      string                 `json:"framework"`
 			ConfigSource   string                 `json:"configSource"`
+			Subdirectory   string                 `json:"subdirectory"`
 			DetectedConfig map[string]interface{} `json:"detectedConfig"`
 		}
 		if err := json.Unmarshal(data, &detected); err != nil {
 			return request, fmt.Errorf("invalid detected configuration: %w", err)
+		}
+		if detected.Subdirectory != o.Subdirectory {
+			return request, fmt.Errorf("configuration detection returned a different service directory; upgrade the API before deploying this service")
 		}
 		config = detected.DetectedConfig
 		if config == nil {

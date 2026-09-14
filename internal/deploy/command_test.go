@@ -69,9 +69,6 @@ func TestExplicitMonorepoSettingsAndPortArePreserved(t *testing.T) {
 	if err != nil || request.Subdirectory != "apps/api" || request.Configuration["port"] != 9000 || request.Configuration["internalPort"] != 9000 || request.Configuration["appType"] != "python" {
 		t.Fatalf("plan %+v: %v", request, err)
 	}
-	if _, err := planAsIs(context.Background(), nil, "fixture", DeployOptions{Subdirectory: "apps/api"}); err == nil {
-		t.Fatal("detected repository root as a service")
-	}
 }
 
 func TestAsIsDryRunNeverSubmitsAndDoesNotPrintSecrets(t *testing.T) {
@@ -169,5 +166,48 @@ func TestAsIsCommandCreatesOriginalApplicationAndReportsItsLiveID(t *testing.T) 
 	}
 	if strings.Join(paths, ",") != "/api/v1/deployment/list,/api/v1/deployment/create,/api/v1/deployment/original-id" {
 		t.Fatalf("unexpected mutations %v", paths)
+	}
+}
+
+func TestServiceDirectoryDetectionUsesTheSameOwnedAPIAndOriginalSettings(t *testing.T) {
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		var input map[string]string
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			t.Fatal(err)
+		}
+		if r.URL.Path != "/api/v1/deployment/detect-config" || input["subdirectory"] != "apps/api" || input["branch"] != "feature/api" {
+			t.Fatalf("wrong service source: %+v", input)
+		}
+		io.WriteString(w, `{"success":true,"data":{"appType":"python","framework":"flask","configSource":"quikdb.json","subdirectory":"apps/api","detectedConfig":{"buildCommand":"python build.py","startCommand":"python original.py","installCommand":"pip install -r locked.txt","runtimeVersion":"3.12","port":8080,"healthCheck":"/ready"}}}`)
+	})
+	request, err := planAsIs(context.Background(), c, "fixture-token", DeployOptions{Repo: "https://github.com/quikdb/fixture", Branch: "feature/api", Name: "fixture-api", Subdirectory: "apps/api"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if request.Subdirectory != "apps/api" || request.Configuration["startCommand"] != "python original.py" || request.Configuration["installCommand"] != "pip install -r locked.txt" || request.Configuration["healthCheck"] != "/ready" {
+		t.Fatalf("changed original settings: %+v", request)
+	}
+}
+
+func TestServiceDetectionFailuresCannotBecomeADeploymentPlan(t *testing.T) {
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(403)
+		io.WriteString(w, `{"success":false,"error":"repository_access_denied"}`)
+	})
+	if _, err := planAsIs(context.Background(), c, "fixture-token", DeployOptions{Subdirectory: "apps/api"}); err == nil {
+		t.Fatal("ignored private-source denial")
+	}
+}
+
+func TestSelectedServiceCannotSilentlyUseRepositoryRootSettings(t *testing.T) {
+	for _, returned := range []string{"", "apps/other"} {
+		t.Run(returned, func(t *testing.T) {
+			c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+				json.NewEncoder(w).Encode(map[string]any{"success": true, "data": map[string]any{"appType": "nodejs", "subdirectory": returned, "detectedConfig": map[string]any{"startCommand": "node root.js"}}})
+			})
+			if _, err := planAsIs(context.Background(), c, "fixture-token", DeployOptions{Repo: "https://github.com/quikdb/fixture", Branch: "main", Subdirectory: "apps/api"}); err == nil {
+				t.Fatal("accepted settings from a different service directory")
+			}
+		})
 	}
 }
