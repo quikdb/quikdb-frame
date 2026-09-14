@@ -104,7 +104,7 @@ func deployApplication(ctx context.Context, client *APIClient, token string, req
 			return nil, err
 		}
 		if request.SourceSHA256 != "" {
-			if detail.SourceSnapshot == nil || detail.SourceSnapshot.Kind != "archive" || detail.SourceSnapshot.SHA256 != request.SourceSHA256 || detail.Subdirectory != subdirectory {
+			if detail.SourceSnapshot == nil || detail.SourceSnapshot.Version != 1 || detail.SourceSnapshot.Kind != "archive" || detail.SourceSnapshot.SHA256 != request.SourceSHA256 || detail.Subdirectory != subdirectory {
 				return nil, fmt.Errorf("existing application uses a different source; archive replacement is not available yet, and no new deployment was submitted")
 			}
 		} else if normalizeRepo(detail.RepositoryURL) != normalizeRepo(repoURL) || detail.RepositoryBranch != branch || detail.Subdirectory != subdirectory {

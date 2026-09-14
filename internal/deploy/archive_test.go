@@ -249,3 +249,75 @@ func TestArchiveCannotSilentlyReuseDifferentApplicationSource(t *testing.T) {
 		t.Fatal("silently kept a different source")
 	}
 }
+
+func TestArchiveInactiveConsumerCannotUploadOrCreate(t *testing.T) {
+	credentialFixture(t)
+	t.Setenv("QUIKDB_TOKEN", "")
+	if err := SaveAuth(&AuthConfig{Token: "fixture-token", ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+	root, config := archiveFixture(t)
+	mutations := 0
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			mutations++
+			w.WriteHeader(500)
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/list") {
+			fmt.Fprint(w, `{"success":true,"data":[]}`)
+		} else {
+			fmt.Fprint(w, `{"success":true,"data":{"archiveDeployment":false}}`)
+		}
+	})
+	old := deployClientFactory
+	defer func() { deployClientFactory = old }()
+	deployClientFactory = func() *APIClient { return c }
+	err := Command([]string{"--source", root, "--config", config, "--name", "fixture", "--json"})
+	if err == nil || !strings.Contains(err.Error(), "not active") || mutations != 0 {
+		t.Fatal("inactive archive consumer accepted mutations")
+	}
+}
+
+func TestArchiveRepeatPreservesIdentityWithoutUploadingAgain(t *testing.T) {
+	credentialFixture(t)
+	t.Setenv("QUIKDB_TOKEN", "")
+	if err := SaveAuth(&AuthConfig{Token: "fixture-token", ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+	root, config := archiveFixture(t)
+	packaged, err := packageSource(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := packaged.SHA256
+	packaged.Close()
+	mutations := 0
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "GET" {
+			mutations++
+			w.WriteHeader(500)
+			return
+		}
+		switch r.URL.Path {
+		case "/api/v1/deployment/list":
+			fmt.Fprint(w, `{"success":true,"data":[{"deploymentId":"same-fixture-id","applicationName":"fixture","status":"live"}]}`)
+		case "/api/v1/deployment/source-capabilities":
+			fmt.Fprint(w, `{"success":true,"data":{"archiveDeployment":true}}`)
+		case "/api/v1/deployment/same-fixture-id":
+			fmt.Fprintf(w, `{"success":true,"data":{"deployment":{"deploymentId":"same-fixture-id","status":"live","sourceSnapshot":{"version":1,"kind":"archive","sha256":"%s"}}}}`, digest)
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+			w.WriteHeader(404)
+		}
+	})
+	old := deployClientFactory
+	defer func() { deployClientFactory = old }()
+	deployClientFactory = func() *APIClient { return c }
+	if err := Command([]string{"--source", root, "--config", config, "--name", "fixture", "--json"}); err != nil {
+		t.Fatal(err)
+	}
+	if mutations != 0 {
+		t.Fatal("repeated upload/deployment")
+	}
+}
