@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/quikdb/quikdb-frame/contracts/deployment-manifest-v1.schema.json",
+  "title": "QuikDB single-service deployment manifest v1",
+  "description": "Settings for original-language as-is deployment. Node runtime versions are major-only. Runtime availability is separately qualified. This is not the native multi-service quikdb.yaml format.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "runtime",
+    "installCommand",
+    "buildCommand",
+    "startCommand",
+    "port"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "runtime": {
+      "enum": [
+        "nodejs",
+        "python",
+        "go",
+        "bun",
+        "deno",
+        "ruby",
+        "java",
+        "dotnet",
+        "php",
+        "rust",
+        "static"
+      ]
+    },
+    "framework": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^[^\\u0000]*$"
+    },
+    "installCommand": {
+      "type": "string",
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000]*$"
+    },
+    "buildCommand": {
+      "type": "string",
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000]*$"
+    },
+    "startCommand": {
+      "type": "string",
+      "maxLength": 4096,
+      "pattern": "^[^\\u0000]*[^\\s\\u0000][^\\u0000]*$"
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "runtimeVersion": {
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^[0-9]+(?:\\.[0-9]+){0,2}$"
+    },
+    "nodeVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 99
+    },
+    "healthCheck": {
+      "type": "string",
+      "maxLength": 2048,
+      "pattern": "^/(?!/)[^\\\\\\u0000-\\u001f\\u007f]*$"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "runtime": {
+            "const": "nodejs"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "runtimeVersion": {
+            "pattern": "^[1-9][0-9]?$"
+          }
+        }
+      },
+      "else": {
+        "not": {
+          "required": [
+            "nodeVersion"
+          ]
+        }
+      }
+    }
+  ]
+}

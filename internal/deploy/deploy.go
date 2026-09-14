@@ -23,6 +23,7 @@ type ServiceConfig struct {
 }
 
 type DeployRequest struct {
+	ManifestVersion  int                    `json:"-"`
 	RepositoryURL    string                 `json:"repositoryUrl"`
 	RepositoryBranch string                 `json:"repositoryBranch"`
 	ApplicationName  string                 `json:"applicationName"`

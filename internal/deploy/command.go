@@ -21,6 +21,8 @@ type DeployOptions struct {
 	Port                                           int
 	DryRun, JSON                                   bool
 	Service                                        string
+	explicitConfiguration                          map[string]interface{}
+	manifestVersion                                int
 }
 
 func ParseDeployOptions(args []string) (DeployOptions, error) {
@@ -93,6 +95,12 @@ func Command(args []string) error {
 	if err := resolveSource(&o); err != nil {
 		return err
 	}
+	if o.Config != "" {
+		o.explicitConfiguration, o.manifestVersion, err = readDeploymentConfiguration(o.Config, false)
+		if err != nil {
+			return err
+		}
+	}
 	token, err := RequireAuth()
 	if err != nil {
 		return err
@@ -104,7 +112,7 @@ func Command(args []string) error {
 	if err != nil {
 		return err
 	}
-	summary := map[string]interface{}{"mode": "as-is", "repositoryUrl": request.RepositoryURL, "repositoryBranch": request.RepositoryBranch, "applicationName": request.ApplicationName, "subdirectory": request.Subdirectory, "configSource": request.Configuration["configSource"], "appType": request.Configuration["appType"], "port": request.Configuration["port"], "source": "committed Git branch"}
+	summary := map[string]interface{}{"mode": "as-is", "repositoryUrl": request.RepositoryURL, "repositoryBranch": request.RepositoryBranch, "applicationName": request.ApplicationName, "subdirectory": request.Subdirectory, "configSource": request.Configuration["configSource"], "appType": request.Configuration["appType"], "port": request.Configuration["port"], "source": "committed Git branch", "manifestVersion": request.ManifestVersion}
 	if o.DryRun {
 		return json.NewEncoder(os.Stdout).Encode(summary)
 	}
@@ -177,15 +185,15 @@ func planAsIs(ctx context.Context, c *APIClient, token string, o DeployOptions) 
 	request := DeployRequest{RepositoryURL: o.Repo, RepositoryBranch: o.Branch, ApplicationName: o.Name, Subdirectory: o.Subdirectory}
 	var config map[string]interface{}
 	if o.Config != "" {
-		data, err := os.ReadFile(o.Config)
-		if err != nil {
-			return request, err
-		}
-		if err := json.Unmarshal(data, &config); err != nil {
-			return request, fmt.Errorf("invalid deployment configuration JSON: %w", err)
-		}
-		if config == nil {
-			return request, fmt.Errorf("deployment configuration must be a JSON object")
+		if o.explicitConfiguration != nil {
+			config = o.explicitConfiguration
+			request.ManifestVersion = o.manifestVersion
+		} else {
+			var err error
+			config, request.ManifestVersion, err = readDeploymentConfiguration(o.Config, false)
+			if err != nil {
+				return request, err
+			}
 		}
 	} else {
 		data, err := c.request(ctx, token, http.MethodPost, "/detect-config", map[string]string{"repositoryUrl": o.Repo, "branch": o.Branch, "subdirectory": o.Subdirectory})
@@ -193,11 +201,12 @@ func planAsIs(ctx context.Context, c *APIClient, token string, o DeployOptions) 
 			return request, err
 		}
 		var detected struct {
-			AppType        string                 `json:"appType"`
-			Framework      string                 `json:"framework"`
-			ConfigSource   string                 `json:"configSource"`
-			Subdirectory   string                 `json:"subdirectory"`
-			DetectedConfig map[string]interface{} `json:"detectedConfig"`
+			AppType         string                 `json:"appType"`
+			Framework       string                 `json:"framework"`
+			ConfigSource    string                 `json:"configSource"`
+			Subdirectory    string                 `json:"subdirectory"`
+			ManifestVersion int                    `json:"manifestVersion"`
+			DetectedConfig  map[string]interface{} `json:"detectedConfig"`
 		}
 		if err := json.Unmarshal(data, &detected); err != nil {
 			return request, fmt.Errorf("invalid detected configuration: %w", err)
@@ -205,6 +214,7 @@ func planAsIs(ctx context.Context, c *APIClient, token string, o DeployOptions) 
 		if detected.Subdirectory != o.Subdirectory {
 			return request, fmt.Errorf("configuration detection returned a different service directory; upgrade the API before deploying this service")
 		}
+		request.ManifestVersion = detected.ManifestVersion
 		config = detected.DetectedConfig
 		if config == nil {
 			return request, fmt.Errorf("configuration detection returned no build settings; use --config")

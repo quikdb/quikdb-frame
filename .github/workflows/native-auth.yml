@@ -1,7 +1,7 @@
 name: Native CLI Auth Validation
 on:
   push:
-    branches: [feat/frame-native-auth, feat/frame-as-is-deployment, feat/frame-cli-management, feat/frame-source-settings]
+    branches: [feat/frame-native-auth, feat/frame-as-is-deployment, feat/frame-cli-management, feat/frame-source-settings, feat/frame-manifest-v1]
   pull_request:
     paths:
       - internal/deploy/**
@@ -34,6 +34,10 @@ jobs:
           for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
             GOOS=${platform%/*} GOARCH=${platform#*/} go build -o /tmp/frame-auth-build ./cmd/quikdb-frame
           done
+      - name: Validate public manifest schema against shared corpus
+        run: |
+          python3 -m pip install --disable-pip-version-check jsonschema==4.23.0
+          python3 scripts/manifest_schema_test.py
       - name: Verify installer fixtures
         run: sh scripts/install_test.sh
       - name: Check reachable vulnerabilities

@@ -1,0 +1,570 @@
+[
+  {
+    "name": "original node commands and empty build/install",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": true
+  },
+  {
+    "name": "python original language",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "python",
+      "runtimeVersion": "3.12",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "python original.py",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": true
+  },
+  {
+    "name": "go original language",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "go",
+      "runtimeVersion": "1.24",
+      "installCommand": "",
+      "buildCommand": "go build -o original .",
+      "startCommand": "./original",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": true
+  },
+  {
+    "name": "unicode original command",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "node \"💾original.js\"",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": true
+  },
+  {
+    "name": "deprecated matching node major",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express",
+      "nodeVersion": 22
+    },
+    "valid": true
+  },
+  {
+    "name": "omitted optional metadata",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123
+    },
+    "valid": true
+  },
+  {
+    "name": "unknown version",
+    "manifest": {
+      "schemaVersion": 2,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "null version",
+    "manifest": {
+      "schemaVersion": null,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "string version",
+    "manifest": {
+      "schemaVersion": "1",
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "unknown runtime",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "arbitrary",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "string port",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": "8123",
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "fractional port",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123.5,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "zero port",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 0,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "large port",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 65536,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "blank start",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  \n\t",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "NUL command",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "node secret\u0000source",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "non-string command",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": 7,
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "injected version",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22; source-secret",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "node minor unsupported",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22.1",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "conflicting node major",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express",
+      "nodeVersion": 20
+    },
+    "valid": false,
+    "schemaValid": true
+  },
+  {
+    "name": "wrong node type",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express",
+      "nodeVersion": "22"
+    },
+    "valid": false
+  },
+  {
+    "name": "node on python",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "python",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express",
+      "nodeVersion": 22
+    },
+    "valid": false
+  },
+  {
+    "name": "external health URL",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "https://secret.example",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "protocol-relative health",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "//secret.example",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "health controls",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready\nsecret",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "health backslash",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready\\secret",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "long framework",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+    },
+    "valid": false
+  },
+  {
+    "name": "long command",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "secret env not in v1",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express",
+      "envVars": {
+        "SECRET": "source-secret"
+      }
+    },
+    "valid": false
+  },
+  {
+    "name": "source metadata not in v1",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express",
+      "repositoryUrl": "https://secret.example"
+    },
+    "valid": false
+  },
+  {
+    "name": "permissions not in v1",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express",
+      "scopes": [
+        "agents:data"
+      ]
+    },
+    "valid": false
+  },
+  {
+    "name": "missing schemaVersion",
+    "manifest": {
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "missing runtime",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "missing installCommand",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "missing buildCommand",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "startCommand": "  node original.js  ",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "missing startCommand",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "port": 8123,
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "missing port",
+    "manifest": {
+      "schemaVersion": 1,
+      "runtime": "nodejs",
+      "runtimeVersion": "22",
+      "installCommand": "",
+      "buildCommand": "",
+      "startCommand": "  node original.js  ",
+      "healthCheck": "/ready",
+      "framework": "express"
+    },
+    "valid": false
+  },
+  {
+    "name": "not an object",
+    "manifest": [],
+    "valid": false
+  },
+  {
+    "name": "null object",
+    "manifest": null,
+    "valid": false
+  }
+]

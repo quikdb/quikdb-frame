@@ -87,3 +87,9 @@ be deployed before releasing automatic service-root detection. Immutable commit/
 cross-context Dockerfile/target and versioned shared manifest contracts remain subsequent WP2 work.
 
 Source/settings qualification: runtime 6d59d6e passed full 34843649175, native/desktop/security 34843649225 and main 34843947357. API final 40b747e passed 140 tests (34844097886), production 34844237593 healthy at generation 247/two ready replicas. v0.1.14 tagged on that exact CLI source; signed release34844547094 and actual published Linux/macOS/Windows34844788753 passed. Fresh live account fixtures remain separate. README reflects the directory-detection change. No complete WP2 or conversion certification.
+
+## Deployment manifest v1 — qualification pending
+
+Canonical contracts/deployment-manifest-v1.schema.json and shared acceptance cases define a single-service as-is quikdb.json, separate from native quikdb.yaml. V1 requires runtime, original install/build/start commands and port; strict unknown fields/versions, no environment values/source/agent grants. Optional framework/health default to empty and /. Node version is major-only (1–99), with cross-field consistency enforced at runtime. Runtime availability remains separately qualified.
+
+CLI manifest validate --file quikdb.json --json runs offline and reports metadata only. --config accepts v1 and legacy explicit Compute objects; v1 normalizes runtime to appType and strips schema metadata before API submission. Explicit --port wins. Invalid/bounded/nonregular files fail before authentication. Shared API corpus and public JSON Schema checks, remote Go/native/desktop gates must pass before release. Immutable sources/full stored precedence/context and conversion remain pending.

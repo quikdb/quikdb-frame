@@ -63,6 +63,11 @@ func main() {
 			os.Exit(1)
 		}
 
+	case "manifest":
+		if err := deploy.ManifestCommand(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 	case "deploy":
 		if err := deploy.Command(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -174,6 +179,7 @@ Commands:
   login --token <token>    Log in with an API token (see warning below)
   logout                   Log out
   deploy [service]         Deploy a Frame project or existing application
+  manifest validate        Validate quikdb.json v1 offline before sign-in
   status                   Show deployment status
   inspect <id>             Show public deployment detail (environment values omitted)
   logs <id> [--follow]      Read recent logs; --json follow produces JSON lines
