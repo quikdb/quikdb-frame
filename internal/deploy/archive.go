@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 )
 
@@ -70,7 +72,11 @@ func packageSource(ctx context.Context, directory string) (_ *sourceArchive, err
 		return nil, fmt.Errorf("cannot open source directory")
 	}
 	defer root.Close()
-	f, err := os.CreateTemp("", "quikdb-source-*.tar.gz")
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return nil, fmt.Errorf("cannot create private source archive")
+	}
+	f, err := createPrivateArchive(filepath.Join(os.TempDir(), "quikdb-source-"+hex.EncodeToString(nonce[:])+".tar.gz"))
 	if err != nil {
 		return nil, fmt.Errorf("cannot create private source archive")
 	}
@@ -80,9 +86,6 @@ func packageSource(ctx context.Context, directory string) (_ *sourceArchive, err
 			archive.Close()
 		}
 	}()
-	if err = f.Chmod(0600); err != nil {
-		return nil, fmt.Errorf("cannot protect source archive")
-	}
 	hash := sha256.New()
 	limited := &archiveLimitWriter{out: io.MultiWriter(f, hash)}
 	gz := gzip.NewWriter(limited)
@@ -126,16 +129,14 @@ func packageSource(ctx context.Context, directory string) (_ *sourceArchive, err
 		}
 		total += size
 		archive.Entries++
-		header := &tar.Header{Name: name, Mode: int64(stat.Mode().Perm()), Size: size, Typeflag: tar.TypeReg}
+		header := &tar.Header{Name: name, Mode: int64(stat.Mode().Perm()), Size: size, Typeflag: tar.TypeReg, ModTime: stat.ModTime()}
 		if stat.IsDir() {
 			header.Typeflag = tar.TypeDir
 			header.Name += "/"
-		}
-		if err := tw.WriteHeader(header); err != nil {
-			return err
-		}
-		if stat.IsDir() {
-			return nil
+			if runtime.GOOS == "windows" {
+				header.Mode = 0755
+			}
+			return tw.WriteHeader(header)
 		}
 		input, err := root.Open(filepath.FromSlash(name))
 		if err != nil {
@@ -145,6 +146,25 @@ func packageSource(ctx context.Context, directory string) (_ *sourceArchive, err
 		opened, err := input.Stat()
 		if err != nil || !os.SameFile(stat, opened) {
 			return fmt.Errorf("source entry changed during packaging")
+		}
+		// NTFS does not expose Unix executable bits. Preserve shebang scripts as
+		// portable executables; ordinary Windows source files become 0644.
+		if runtime.GOOS == "windows" {
+			var prefix [2]byte
+			n, readErr := input.Read(prefix[:])
+			if readErr != nil && readErr != io.EOF {
+				return readErr
+			}
+			if _, err := input.Seek(0, io.SeekStart); err != nil {
+				return err
+			}
+			header.Mode = 0644
+			if n == 2 && prefix[0] == '#' && prefix[1] == '!' {
+				header.Mode = 0755
+			}
+		}
+		if err := tw.WriteHeader(header); err != nil {
+			return err
 		}
 		copied, err := io.Copy(tw, io.LimitReader(input, size+1))
 		final, statErr := input.Stat()
