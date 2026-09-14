@@ -3,10 +3,10 @@ package upgrade
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"regexp"
 	"runtime"
@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const releasesAPI = "https://api.github.com/repos/quikdb/quikdb-frame/releases/latest"
+const latestReleaseURL = "https://github.com/quikdb/quikdb-frame/releases/latest"
 
 var httpClient = &http.Client{Timeout: 2 * time.Minute}
 
@@ -100,20 +100,43 @@ func fetchSmall(url string) ([]byte, error) {
 }
 
 func latestTag() (string, error) {
-	body, err := fetchSmall(releasesAPI)
+	// GitHub's public release redirect avoids anonymous API quotas on shared runners.
+	// Inspect the first redirect rather than following an unvalidated destination.
+	client := *httpClient
+	client.CheckRedirect = func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }
+	req, err := http.NewRequest(http.MethodHead, latestReleaseURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("resolve latest release: %w", err)
 	}
-	var release struct {
-		Tag string `json:"tag_name"`
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("resolve latest release: %w", err)
 	}
-	if err := json.Unmarshal(body, &release); err != nil {
-		return "", err
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusMovedPermanently && resp.StatusCode != http.StatusFound &&
+		resp.StatusCode != http.StatusSeeOther && resp.StatusCode != http.StatusTemporaryRedirect &&
+		resp.StatusCode != http.StatusPermanentRedirect {
+		return "", fmt.Errorf("resolve latest release: server returned %d instead of a release redirect", resp.StatusCode)
 	}
-	if !regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`).MatchString(release.Tag) {
-		return "", fmt.Errorf("invalid stable release tag %q", release.Tag)
+	destination, err := resp.Location()
+	if err != nil {
+		return "", fmt.Errorf("resolve latest release: invalid redirect: %w", err)
 	}
-	return release.Tag, nil
+	return releaseTagFromURL(destination)
+}
+
+func releaseTagFromURL(destination *url.URL) (string, error) {
+	const prefix = "/quikdb/quikdb-frame/releases/tag/"
+	if destination.Scheme != "https" || destination.Host != "github.com" || destination.User != nil ||
+		destination.RawQuery != "" || destination.ForceQuery || destination.Fragment != "" ||
+		!strings.HasPrefix(destination.EscapedPath(), prefix) {
+		return "", fmt.Errorf("latest release redirected outside the expected GitHub release path")
+	}
+	tag := strings.TrimPrefix(destination.EscapedPath(), prefix)
+	if !regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+$`).MatchString(tag) {
+		return "", fmt.Errorf("invalid stable release tag %q", tag)
+	}
+	return tag, nil
 }
 
 func checksumFor(body []byte, binaryName string) (string, error) {
