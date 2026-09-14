@@ -85,6 +85,30 @@ errors go to stderr with a nonzero exit. Put flags before an optional native Fra
 submission because automatic business-logic conversion is not certified yet. This release does
 not offer managed storage for stateful databases/files or change their schemas/data.
 
+## Validate a deployment manifest
+
+From v0.1.15, a single-service `quikdb.json` can opt into `schemaVersion: 1`.
+The [schema](contracts/deployment-manifest-v1.schema.json) and
+[example](contracts/deployment-manifest-v1.example.json) define runtime, explicit original
+install/build/start commands and port. Empty install/build commands are intentional when no
+such step is required. Optional framework and health check default to empty and `/`.
+Runtime versions remain subject to platform support; Node versions are major-only.
+
+```text
+quikdb-frame manifest validate --file quikdb.json --json
+quikdb-frame deploy --repo https://github.com/your-team/your-app --branch main --mode as-is --config quikdb.json --dry-run --json
+```
+
+Validation runs offline without login and emits metadata only. Unknown versions/fields and
+embedded environment values are rejected. Set secrets explicitly through Compute or CLI env
+commands. Commit/push the manifest in the selected service directory for shared API/dashboard
+detection; an explicit local `--config` applies only to that invocation. `--port` overrides its
+port. Saved settings/redeploy precedence is still being completed.
+
+Unversioned repository manifests and explicit Compute `--config` objects remain readable.
+The offline validator certifies v1 structure, not runtime compatibility, deployment success or
+conversion. Native multi-service `quikdb.yaml` is a separate format.
+
 ## CLI sign-in
 
 Download the binary for your platform and `SHA256SUMS` from the same tagged

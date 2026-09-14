@@ -11,6 +11,11 @@ on:
         description: Exact latest stable release to validate
         required: true
         type: string
+      manifest:
+        description: Verify the published offline manifest command
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 jobs:
@@ -51,3 +56,26 @@ jobs:
           test "$(./"$asset" version)" = "quikdb-frame $FRAME_TEST_TAG"
           if command -v sha256sum >/dev/null; then sha256sum -c selected-sum; else shasum -a 256 -c selected-sum; fi
           printf '%s published CLI checksum/provenance/version/self-upgrade passed.\n' "$RUNNER_OS" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify actual published offline manifest validation
+        if: ${{ inputs.manifest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-smoke
+          case "$RUNNER_OS/$RUNNER_ARCH" in
+            Linux/X64) asset=quikdb-frame-linux-amd64 ;;
+            macOS/ARM64) asset=quikdb-frame-darwin-arm64 ;;
+            macOS/X64) asset=quikdb-frame-darwin-amd64 ;;
+            Windows/X64) asset=quikdb-frame-windows-amd64.exe ;;
+            *) exit 1 ;;
+          esac
+          curl --fail --silent --show-error --proto '=https' --max-time 30 "https://raw.githubusercontent.com/quikdb/quikdb-frame/$FRAME_TEST_TAG/contracts/deployment-manifest-v1.example.json" -o manifest-example.json
+          ./"$asset" manifest validate --file manifest-example.json --json > manifest-result.json
+          node -e 'const r=require("./manifest-result.json"); if(r.valid!==true||r.schemaVersion!==1||r.runtime!=="nodejs"||r.mode!=="as-is"||r.port!==8123||Object.keys(r).length!==5)process.exit(1)'
+          node -e 'const fs=require("fs");const r=require("./manifest-example.json");r.schemaVersion=2;fs.writeFileSync("manifest-invalid.json",JSON.stringify(r))'
+          if ./"$asset" manifest validate --file manifest-invalid.json --json > manifest-rejected.txt 2>&1; then
+            echo 'Unsupported manifest version was accepted'; exit 1
+          fi
+          node -e 'const s=require("fs").readFileSync("manifest-rejected.txt","utf8");if(!s.includes("invalid deployment manifest")||s.includes("original.js"))process.exit(1)'
+          printf '%s published offline manifest validation and unsupported-version rejection passed.\n' "$RUNNER_OS" >> "$GITHUB_STEP_SUMMARY"
