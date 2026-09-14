@@ -114,3 +114,60 @@ func TestUncertifiedConversionBlocksBeforeAuthenticationOrSubmission(t *testing.
 		t.Fatalf("conversion result %v", err)
 	}
 }
+
+func TestAsIsCommandCreatesOriginalApplicationAndReportsItsLiveID(t *testing.T) {
+	credentialFixture(t)
+	t.Setenv("QUIKDB_TOKEN", "")
+	if err := SaveAuth(&AuthConfig{Token: "fixture-token", ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+	oldFactory := deployClientFactory
+	t.Cleanup(func() { deployClientFactory = oldFactory })
+	paths := []string{}
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path)
+		switch r.URL.Path {
+		case "/api/v1/deployment/list":
+			io.WriteString(w, `{"success":true,"data":{"deployments":[],"pagination":{"page":1,"pages":0}}}`)
+		case "/api/v1/deployment/create":
+			var payload DeployRequest
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Error(err)
+			}
+			if payload.Subdirectory != "" || payload.RepositoryURL != "https://github.com/team/app" || payload.RepositoryBranch != "main" || payload.Configuration["appType"] != "nodejs" || payload.Configuration["startCommand"] != "node server.js" {
+				t.Errorf("original request altered: %+v", payload)
+			}
+			io.WriteString(w, `{"success":true,"data":{"deploymentId":"original-id","status":"building"}}`)
+		case "/api/v1/deployment/original-id":
+			io.WriteString(w, `{"success":true,"data":{"deployment":{"deploymentId":"original-id","status":"live","applicationName":"app"}}}`)
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	})
+	deployClientFactory = func() *APIClient { return client }
+	file := filepath.Join(t.TempDir(), "deployment.json")
+	if err := os.WriteFile(file, []byte(`{"appType":"nodejs","startCommand":"node server.js","port":3000}`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	oldOut := os.Stdout
+	reader, writer, _ := os.Pipe()
+	os.Stdout = writer
+	t.Cleanup(func() { os.Stdout = oldOut; reader.Close(); writer.Close() })
+	err := Command([]string{"--repo", "https://github.com/team/app", "--branch", "main", "--config", file, "--json"})
+	writer.Close()
+	os.Stdout = oldOut
+	raw, _ := io.ReadAll(reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Mode       string     `json:"mode"`
+		Deployment Deployment `json:"deployment"`
+	}
+	if json.Unmarshal(raw, &result) != nil || result.Mode != "as-is" || result.Deployment.DeploymentID != "original-id" || result.Deployment.Status != "live" {
+		t.Fatalf("result %s", raw)
+	}
+	if strings.Join(paths, ",") != "/api/v1/deployment/list,/api/v1/deployment/create,/api/v1/deployment/original-id" {
+		t.Fatalf("unexpected mutations %v", paths)
+	}
+}
