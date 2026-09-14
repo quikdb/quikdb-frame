@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const fixtureSourceID = "12345678-1234-1234-1234-123456789abc"
@@ -188,7 +189,10 @@ func TestArchiveDryRunIsOfflineAndNeverPrintsSourceOrSecretValues(t *testing.T) 
 }
 func TestArchiveCommandUploadsOnlyAfterAccountPreflightThenCreatesByHandle(t *testing.T) {
 	credentialFixture(t)
-	t.Setenv("QUIKDB_TOKEN", "fixture-token")
+	t.Setenv("QUIKDB_TOKEN", "")
+	if err := SaveAuth(&AuthConfig{Token: "fixture-token", ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
 	root, config := archiveFixture(t)
 	var calls []string
 	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
