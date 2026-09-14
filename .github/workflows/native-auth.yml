@@ -23,11 +23,10 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.27.1'
-      - name: Resolve and report public module checksums
+      - name: Verify dependency lockfiles
         run: |
           go mod tidy
-          cat go.mod
-          cat go.sum
+          git diff --exit-code -- go.mod go.sum
       - name: Test credentials and callbacks
         run: |
           go test -race ./...
@@ -37,3 +36,28 @@ jobs:
           done
       - name: Check reachable vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+  desktop-credentials:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      FRAME_KEYRING_TEST: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
+      - name: Create disposable macOS keychain
+        if: runner.os == 'macOS'
+        run: |
+          fixture_keychain_path="$RUNNER_TEMP/quikdb-frame-validation.keychain-db"
+          security create-keychain -p fixture-keychain-password "$fixture_keychain_path"
+          security unlock-keychain -p fixture-keychain-password "$fixture_keychain_path"
+          security default-keychain -s "$fixture_keychain_path"
+      - run: go test ./internal/deploy ./internal/upgrade
+      - name: Remove disposable macOS keychain
+        if: always() && runner.os == 'macOS'
+        run: security delete-keychain "$RUNNER_TEMP/quikdb-frame-validation.keychain-db"

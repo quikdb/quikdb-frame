@@ -36,8 +36,11 @@ node/operator runner. Frame releases are distributed through GitHub Releases, no
 ## Known gaps
 
 This contract milestone is not universal deployment or complete Frame. Deploy still requires
-a Frame project. Browser login still uses the legacy token callback; PKCE/headless/refresh
-work remains in WP1. Express/Flask conversion currently generates handler stubs and must not
+a Frame project. v0.1.9 still uses legacy browser login. PKCE/device-code approval, protected
+credential storage, cross-process refresh locking and dedicated rotating sessions are being
+validated on feat/frame-native-auth and are not released yet. CLI build uses Go 1.27.1;
+keyring v0.2.6 and flock v0.13.0 are locked in go.mod/go.sum. Express/Flask conversion generates
+handler stubs and must not
 be treated as business-logic preservation. Core adapters and production API/web wiring need
 the subsequent work packages. No managed databases have been provisioned by this change.
 
@@ -45,3 +48,8 @@ the subsequent work packages. No managed databases have been provisioned by this
 
 2026-09-14: deployment contract repair on feat/frame-deployment-contracts. Validation and
 release status are tracked in EA/workstreams/active/quikdb-frame-universal-deployment.md.
+
+v0.1.9 published from 31651f6: remote contract/race/vet/platform builds and full scaffold,
+Docker/runtime/load checks passed. Published Linux asset download/checksum/version/upgrade
+passed in an isolated credential-free remote job. Other platform binaries were built, but
+desktop credential integration belongs to the next native-login milestone.

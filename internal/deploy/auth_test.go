@@ -236,3 +236,29 @@ func TestAuthAPIErrorCannotBecomeSuccess(t *testing.T) {
 		}
 	}
 }
+
+func TestNativeCredentialStoreRoundTrip(t *testing.T) {
+	if os.Getenv("FRAME_KEYRING_TEST") != "1" {
+		t.Skip("native credential integration runs on isolated desktop CI jobs")
+	}
+	account, err := randomSecret()
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := osCredentialStore{}
+	const service = "quikdb-frame-validation"
+	if err := store.Set(service, account, "fixture-not-a-user-token"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { store.Delete(service, account) })
+	value, err := store.Get(service, account)
+	if err != nil || value != "fixture-not-a-user-token" {
+		t.Fatalf("native storage round trip failed: %v", err)
+	}
+	if err := store.Delete(service, account); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Get(service, account); err == nil {
+		t.Fatal("native credential remains after deletion")
+	}
+}

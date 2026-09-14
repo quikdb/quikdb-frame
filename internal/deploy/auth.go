@@ -110,7 +110,8 @@ func LoginWithToken(token string) error {
 	if err := authClientFactory().request(ctx, "GET", "me", token, nil, &profile); err != nil {
 		return err
 	}
-	if profile.WalletAddress == "" {
+	expires, expiryErr := time.Parse(time.RFC3339, profile.AccessExpiresAt)
+	if profile.WalletAddress == "" || expiryErr != nil || time.Until(expires) <= 0 {
 		return fmt.Errorf("authentication response missing account identity")
 	}
 	if err := SaveAuth(&AuthConfig{Token: token, Email: profile.Email, WalletAddress: profile.WalletAddress, ExpiresAt: profile.AccessExpiresAt}); err != nil {
@@ -135,8 +136,12 @@ func Whoami() error {
 
 func RequireAuth() (string, error) {
 	if token := os.Getenv("QUIKDB_TOKEN"); token != "" {
-		if err := authClientFactory().request(context.Background(), "GET", "me", token, nil, &authProfile{}); err != nil {
+		var profile authProfile
+		if err := authClientFactory().request(context.Background(), "GET", "me", token, nil, &profile); err != nil {
 			return "", err
+		}
+		if profile.WalletAddress == "" {
+			return "", fmt.Errorf("authentication response missing account identity")
 		}
 		return token, nil
 	}
