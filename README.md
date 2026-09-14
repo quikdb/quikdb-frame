@@ -45,7 +45,35 @@ quikdb-frame deploy
 
 `deploy` creates services, observes active builds and retries failed/stopped/sleeping services
 using the same deployment ID. Once live, push to the connected branch for Git auto-deployment.
-The current CLI deploys Frame layouts; ordinary application deployment is the next work package.
+From v0.1.11, the CLI also deploys existing GitHub applications as-is. Deployment-time
+conversion remains unavailable until preservation checks pass.
+
+## Deploy an existing application
+
+From the existing application's Git working tree, `quikdb-frame deploy` uses its origin and
+current branch. No Frame manifest or source rewrite is required. To deploy another repository:
+
+```text
+quikdb-frame deploy --repo https://github.com/your-team/your-app --branch main --mode as-is --dry-run
+quikdb-frame deploy --repo https://github.com/your-team/your-app --branch main --mode as-is
+```
+
+Compute detects the original runtime and build/start settings, including its Dockerfile. Set
+required runtime variables in Compute explicitly. Private repositories require the same Git
+connection used by the dashboard. Only committed and pushed source is deployed; this first path
+supports GitHub, not local uploads or arbitrary host/runtime requirements.
+
+For a monorepo service, supply `--subdirectory apps/api --config deployment.json`. The JSON object
+contains the existing Compute configuration fields (`appType`, `configSource`, original
+`buildCommand`/`startCommand`, and actual `port`; resource/env fields are explicit). Detection
+currently reads the repository root and will require this explicit service configuration.
+`--port` overrides both port fields. The dry-run prints source/runtime/port metadata without
+printing configuration commands or environment values. As-is `--json` emits a result object;
+errors go to stderr with a nonzero exit. Put flags before an optional native Frame service name.
+
+`--mode frame` works for native Frame projects. Existing non-Frame source is blocked before
+submission because automatic business-logic conversion is not certified yet. This release does
+not offer managed storage for stateful databases/files or change their schemas/data.
 
 ## CLI sign-in
 

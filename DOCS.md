@@ -36,10 +36,11 @@ node/operator runner. Frame releases are distributed through GitHub Releases, no
 
 ## Known gaps
 
-This contract milestone is not universal deployment or complete Frame. Deploy still requires
-a Frame project. v0.1.9 still uses legacy browser login. PKCE/device-code approval, protected
-credential storage, cross-process refresh locking and dedicated rotating sessions are being
-validated on feat/frame-native-auth and are not released yet. CLI build uses Go 1.27.1;
+This is not complete Frame or universal host/runtime compatibility. v0.1.10 publishes native
+PKCE/device-code approval, protected credential storage, cross-process refresh locking and
+rotating scoped sessions. The as-is Git deployment candidate on feat/frame-as-is-deployment
+removes the Frame-layout requirement, reuses Compute root detection and accepts explicit
+monorepo service configuration. It is being validated and is not released yet. CLI build uses Go 1.27.1;
 keyring v0.2.6 and flock v0.13.0 are locked in go.mod/go.sum. Express/Flask conversion generates
 handler stubs and must not be treated as business-logic preservation. Core adapters and production API/web wiring need
 the subsequent work packages. No managed databases have been provisioned by this change.

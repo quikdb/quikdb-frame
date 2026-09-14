@@ -64,11 +64,7 @@ func main() {
 		}
 
 	case "deploy":
-		svcName := ""
-		if len(os.Args) >= 3 {
-			svcName = os.Args[2]
-		}
-		if err := deploy.Run(svcName); err != nil {
+		if err := deploy.Command(os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -177,7 +173,7 @@ Commands:
   login --device           Authorize a remote/headless terminal
   login --token <token>    Log in with an API token (see warning below)
   logout                   Log out
-  deploy [service]         Deploy to QuikDB Compute
+  deploy [service]         Deploy a Frame project or existing application
   status                   Show deployment status
   whoami                   Show authenticated account and plan
   convert <path> --from <framework>  Convert existing project
@@ -187,6 +183,18 @@ Commands:
 
 Options for init:
   --db <type>              Database type: postgres, mongo, mysql, sqlite (default: postgres)
+
+Options for deploy (flags before service name):
+  --mode as-is             Preserve the application language/runtime (default)
+  --repo <GitHub URL>      Deploy a repository without a local Frame layout
+  --branch <branch>        Required with --repo; otherwise use current Git branch
+  --name <name>            Application name (default: repository name)
+  --subdirectory <path>    Service root; currently requires --config
+  --config <path>          Explicit deployment configuration JSON
+  --port <port>            Actual internal application port
+  --dry-run                Review source/config summary without deployment submission
+  --json                   Emit an as-is result JSON object
+  --mode frame             Native Frame only; deployment-time conversion not certified yet
 
 Security:
   QUIKDB_TOKEN             Set this environment variable instead of --token to avoid exposing

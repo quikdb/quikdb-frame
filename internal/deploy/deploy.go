@@ -83,9 +83,19 @@ func Run(svcName string) error {
 }
 
 func deployService(ctx context.Context, client *APIClient, token, repoURL, branch string, svc ServiceConfig, existing map[string]Deployment) (*Deployment, error) {
-	subdirectory := "services/" + svc.DirName
+	config := map[string]interface{}{
+		"appType": mapServiceType(svc.Type), "buildCommand": svc.BuildCommand,
+		"startCommand": svc.StartCommand, "port": 3000, "configSource": "dockerfile",
+	}
+	return deployApplication(ctx, client, token, DeployRequest{RepositoryURL: repoURL,
+		RepositoryBranch: branch, ApplicationName: svc.Name, Subdirectory: "services/" + svc.DirName,
+		Configuration: config}, existing, false)
+}
+
+func deployApplication(ctx context.Context, client *APIClient, token string, request DeployRequest, existing map[string]Deployment, quiet bool) (*Deployment, error) {
+	repoURL, branch, subdirectory, name := request.RepositoryURL, request.RepositoryBranch, request.Subdirectory, request.ApplicationName
 	var d *Deployment
-	if prior, found := existing[svc.Name]; found {
+	if prior, found := existing[name]; found {
 		detail, err := client.Get(ctx, token, prior.DeploymentID)
 		if err != nil {
 			return nil, err
@@ -95,7 +105,9 @@ func deployService(ctx context.Context, client *APIClient, token, repoURL, branc
 		}
 		switch detail.Status {
 		case "live":
-			fmt.Printf("%s already live; push to %s for automatic deployment of changes.\n", svc.Name, branch)
+			if !quiet {
+				fmt.Printf("%s already live; push to %s for automatic deployment of changes.\n", name, branch)
+			}
 			return detail, nil
 		case "failed", "stopped", "sleeping":
 			d, err = client.submit(ctx, token, "/"+url.PathEscape(prior.DeploymentID)+"/redeploy", struct{}{})
@@ -106,22 +118,15 @@ func deployService(ctx context.Context, client *APIClient, token, repoURL, branc
 			d = detail // Observe active work without scheduling a duplicate build.
 		}
 	} else {
-		config := map[string]interface{}{
-			"appType": mapServiceType(svc.Type), "buildCommand": svc.BuildCommand,
-			"startCommand": svc.StartCommand, "port": 3000, "configSource": "dockerfile",
-		}
-		// Environment values are configured explicitly in Compute; never upload local
-		// .env files or example defaults to every service as a deployment side effect.
 		var err error
-		d, err = client.submit(ctx, token, "/create", DeployRequest{
-			RepositoryURL: repoURL, RepositoryBranch: branch, ApplicationName: svc.Name,
-			Subdirectory: subdirectory, Configuration: config,
-		})
+		d, err = client.submit(ctx, token, "/create", request)
 		if err != nil {
 			return nil, err
 		}
 	}
-	fmt.Printf("%s accepted (ID: %s, status: %s); waiting...\n", svc.Name, d.DeploymentID, d.Status)
+	if !quiet {
+		fmt.Printf("%s accepted (ID: %s, status: %s); waiting...\n", name, d.DeploymentID, d.Status)
+	}
 	waitCtx, cancel := context.WithTimeout(ctx, 30*time.Minute)
 	defer cancel()
 	return client.Wait(waitCtx, token, d.DeploymentID, 5*time.Second)
