@@ -79,11 +79,11 @@ Older sessions retain deployment-only access; logout/new login explicitly approv
 access, including secret export. Actual published three-OS checks and fixture acceptance are
 recorded in the ops 08-CLI-MANAGEMENT-2026-09-14 report as they complete.
 
-## Source/settings detection (pending exact-source qualification)
+## Source/settings detection — released 2026-09-14
 
 feat/frame-source-settings passes --subdirectory to the same owner-scoped detection API
 and rejects a returned directory mismatch. Explicit --config remains authoritative. API must
 be deployed before releasing automatic service-root detection. Immutable commit/local-source/
 cross-context Dockerfile/target and versioned shared manifest contracts remain subsequent WP2 work.
 
-Source/settings qualification: runtime 6d59d6e passed full 34843649175, native/desktop/security 34843649225 and main 34843947357. API final 40b747e passed 140 tests (34844097886), production 34844237593 healthy at generation 247/two ready replicas. v0.1.14 tagged on that exact CLI source; signed release/published-platform and live fixtures still being qualified. README reflects the directory-detection change. No complete WP2 or conversion certification.
+Source/settings qualification: runtime 6d59d6e passed full 34843649175, native/desktop/security 34843649225 and main 34843947357. API final 40b747e passed 140 tests (34844097886), production 34844237593 healthy at generation 247/two ready replicas. v0.1.14 tagged on that exact CLI source; signed release34844547094 and actual published Linux/macOS/Windows34844788753 passed. Fresh live account fixtures remain separate. README reflects the directory-detection change. No complete WP2 or conversion certification.
