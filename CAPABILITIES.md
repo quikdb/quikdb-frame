@@ -46,16 +46,16 @@ Deployment and conversion scope follows the QuikDB ops execution plan.
 | Circuit Breaker | Not implemented | Independent fault/recovery fixtures |
 | Distributed Locks | Not implemented | Lease/fencing/concurrent-owner fixtures |
 | Optimistic Locking | Not implemented | Conflict/retry/transaction fixtures |
-| CLI Installation | Go install and platform releases | Checksums/upgrades, OS install and signed provenance |
+| CLI Installation | v0.1.12 public installer; signed/checksummed binaries; actual Linux/macOS/Windows upgrade passed | Remaining install paths and automatic in-CLI provenance |
 | CLI Project Commands | init/add/dev; no true source watching | Manifest-driven coherent local development |
-| CLI Deploy Commands | Current API client and retry work underway | Remote contract + real deploy/update/manage parity |
+| CLI Deploy Commands | v0.1.11 as-is Git/root detection/explicit monorepo; actual Node fixture + same-ID resume passed | Local/private/commit/lifecycle/management parity |
 | CLI Convert Commands | Express/Flask handler stubs | Optional bounded conversion with independent business-logic tests |
 | CLI Generate Commands | Not implemented | Resource/endpoint/provider generation fixtures |
 | AI Integration | Generated assistant instruction files | Correct manifest/service guidance and consent for any remote conversion |
 | Converter Process/Mapping | Regex scanning and Go stubs | Syntax/semantic IR, adapters, unsupported-code rejection, source oracle |
 | Supported Source Frameworks | No preservation-certified framework | Per-version support matrix and independent original/target certification |
 | Size Targets | Targets in SPEC; no certified app benchmarks | Publish image/binary/RSS/startup/latency and total cost measurements |
-| Distribution & Awareness | Release workflow and README | Verified installer plus Compute/docs onboarding entry points |
+| Distribution & Awareness | Public installer/release/README and Compute CLI entry | Full onboarding/source/settings parity |
 | What Frame Is / Is Not | Product positioning | Public claims consistent with this ledger and tested support matrix |
 
 ## Independent safety gates

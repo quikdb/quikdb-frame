@@ -43,7 +43,11 @@ removes the Frame-layout requirement, reuses Compute root detection and accepts 
 monorepo service configuration. Its source gates and published Linux/Windows checks passed;
 macOS download/provenance passed but self-upgrade hit GitHub anonymous API quotas.
 The next patch uses the public latest-release redirect with strict origin/repository/tag validation.
-This fix requires remote source and published-platform verification before claiming completion.
+v0.1.12 at 216a052 passed exact-source gates and actual signed downloads/self-upgrades on
+Linux x64, macOS ARM64 and Windows x64 (34830166123). Actual Linux installer passed in EKS.
+The approved fixture device login, live concurrent refresh, original Node-v22 deployment,
+repeat identity and stopped-app resume passed; both replicas live before cleanup. Fixture deleted,
+access/refresh revoked (401 verified), credential file cleared and temporary workspace removed.
 CLI build uses Go 1.27.1;
 keyring v0.2.6 and flock v0.13.0 are locked in go.mod/go.sum. Express/Flask conversion generates
 handler stubs and must not be treated as business-logic preservation. Core adapters and production API/web wiring need
