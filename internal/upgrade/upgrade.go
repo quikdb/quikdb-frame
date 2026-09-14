@@ -50,7 +50,6 @@ func Run() error {
 	// Download to a temp file next to the current binary
 	tmp := self + ".new"
 	if err := downloadVerified(url, tmp, expected); err != nil {
-		os.Remove(tmp)
 		return fmt.Errorf("download failed: %w", err)
 	}
 
@@ -149,6 +148,12 @@ func downloadVerified(url, dest, expected string) error {
 	if err != nil {
 		return err
 	}
+	verified := false
+	defer func() {
+		if !verified {
+			os.Remove(dest)
+		}
+	}()
 	hash := sha256.New()
 	const maxSize = 64 << 20
 	n, copyErr := io.Copy(io.MultiWriter(f, hash), io.LimitReader(resp.Body, maxSize+1))
@@ -165,6 +170,7 @@ func downloadVerified(url, dest, expected string) error {
 	if hex.EncodeToString(hash.Sum(nil)) != expected {
 		return fmt.Errorf("release checksum mismatch; current binary retained")
 	}
+	verified = true
 	return nil
 }
 
