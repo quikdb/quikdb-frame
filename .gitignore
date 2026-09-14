@@ -39,3 +39,6 @@ coverage.html
 # Build
 /build/
 /tmp/
+
+# Lock CLI dependencies.
+!/go.sum
