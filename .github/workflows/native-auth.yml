@@ -1,7 +1,7 @@
 name: Native CLI Auth Validation
 on:
   push:
-    branches: [feat/frame-native-auth, feat/frame-as-is-deployment, feat/frame-cli-management, feat/frame-source-settings, feat/frame-manifest-v1]
+    branches: [feat/frame-native-auth, feat/frame-as-is-deployment, feat/frame-cli-management, feat/frame-source-settings, feat/frame-manifest-v1, feat/frame-archive-uploads]
   pull_request:
     paths:
       - internal/deploy/**

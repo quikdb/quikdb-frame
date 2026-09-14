@@ -24,8 +24,10 @@ type ServiceConfig struct {
 
 type DeployRequest struct {
 	ManifestVersion  int                    `json:"-"`
-	RepositoryURL    string                 `json:"repositoryUrl"`
-	RepositoryBranch string                 `json:"repositoryBranch"`
+	SourceID         string                 `json:"sourceId,omitempty"`
+	SourceSHA256     string                 `json:"-"`
+	RepositoryURL    string                 `json:"repositoryUrl,omitempty"`
+	RepositoryBranch string                 `json:"repositoryBranch,omitempty"`
 	ApplicationName  string                 `json:"applicationName"`
 	CustomSubdomain  string                 `json:"customSubdomain,omitempty"`
 	Subdirectory     string                 `json:"subdirectory,omitempty"`
@@ -101,13 +103,21 @@ func deployApplication(ctx context.Context, client *APIClient, token string, req
 		if err != nil {
 			return nil, err
 		}
-		if normalizeRepo(detail.RepositoryURL) != normalizeRepo(repoURL) || detail.RepositoryBranch != branch || detail.Subdirectory != subdirectory {
+		if request.SourceSHA256 != "" {
+			if detail.SourceSnapshot == nil || detail.SourceSnapshot.Version != 1 || detail.SourceSnapshot.Kind != "archive" || detail.SourceSnapshot.SHA256 != request.SourceSHA256 || detail.Subdirectory != subdirectory {
+				return nil, fmt.Errorf("existing application uses a different source; archive replacement is not available yet, and no new deployment was submitted")
+			}
+		} else if normalizeRepo(detail.RepositoryURL) != normalizeRepo(repoURL) || detail.RepositoryBranch != branch || detail.Subdirectory != subdirectory {
 			return nil, fmt.Errorf("name belongs to another repository, branch or service directory; choose a distinct service name")
 		}
 		switch detail.Status {
 		case "live":
 			if !quiet {
-				fmt.Printf("%s already live; push to %s for automatic deployment of changes.\n", name, branch)
+				if request.SourceSHA256 != "" {
+					fmt.Printf("%s already live from the same archive.\n", name)
+				} else {
+					fmt.Printf("%s already live; push to %s for automatic deployment of changes.\n", name, branch)
+				}
 			}
 			return detail, nil
 		case "failed", "stopped", "sleeping":
