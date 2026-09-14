@@ -1,5 +1,10 @@
 name: Published CLI Platform Validation
 on:
+  push:
+    branches: [feat/frame-as-is-deployment]
+    paths:
+      - .github/workflows/published-release-validation.yml
+      - internal/upgrade/**
   workflow_dispatch:
     inputs:
       tag:
@@ -24,6 +29,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          FRAME_TEST_TAG=${FRAME_TEST_TAG:-$(gh api repos/quikdb/quikdb-frame/releases/latest --jq .tag_name)}
           [[ "$FRAME_TEST_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           test "$(gh api repos/quikdb/quikdb-frame/releases/latest --jq .tag_name)" = "$FRAME_TEST_TAG"
           case "$RUNNER_OS/$RUNNER_ARCH" in
