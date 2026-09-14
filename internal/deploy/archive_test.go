@@ -123,7 +123,7 @@ func TestArchiveUploadChecksReceiptAndRotatesCredentialWithoutRetries(t *testing
 			calls := 0
 			c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 				calls++
-				if r.Header.Get("Authorization") != "Bearer rotated" || r.Header.Get("Content-Type") != "application/gzip" {
+				if r.Header.Get("Authorization") != "Bearer fixture-token" || r.Header.Get("Content-Type") != "application/gzip" {
 					t.Error("wrong credential/type")
 				}
 				bytes, _ := io.ReadAll(r.Body)
@@ -151,7 +151,7 @@ func TestArchiveUploadChecksReceiptAndRotatesCredentialWithoutRetries(t *testing
 				}
 				json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "data": map[string]interface{}{"sourceId": id, "sha256": digest, "size": size}})
 			})
-			c.TokenProvider = func() (string, error) { return "rotated", nil }
+			c.TokenProvider = func() (string, error) { return "fixture-token", nil }
 			id, err := c.uploadSource(context.Background(), "old", archive)
 			if (err != nil) != (failure != "") || (failure == "" && id != fixtureSourceID) {
 				t.Fatalf("receipt acceptance: %q %v", id, err)
@@ -188,6 +188,7 @@ func TestArchiveDryRunIsOfflineAndNeverPrintsSourceOrSecretValues(t *testing.T) 
 }
 func TestArchiveCommandUploadsOnlyAfterAccountPreflightThenCreatesByHandle(t *testing.T) {
 	credentialFixture(t)
+	t.Setenv("QUIKDB_TOKEN", "fixture-token")
 	root, config := archiveFixture(t)
 	var calls []string
 	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -231,11 +232,13 @@ func TestArchiveCommandUploadsOnlyAfterAccountPreflightThenCreatesByHandle(t *te
 func TestArchiveCannotSilentlyReuseDifferentApplicationSource(t *testing.T) {
 	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "GET" {
-			t.Fatal("mutated mismatched source")
+			t.Error("mutated mismatched source")
+			w.WriteHeader(500)
+			return
 		}
 		fmt.Fprint(w, `{"success":true,"data":{"deployment":{"deploymentId":"fixture","status":"live","sourceSnapshot":{"version":1,"kind":"archive","sha256":"different"}}}}`)
 	})
-	_, err := deployApplication(context.Background(), c, "fixture", DeployRequest{ApplicationName: "app", SourceSHA256: strings.Repeat("a", 64)}, map[string]Deployment{"app": {DeploymentID: "fixture"}}, true)
+	_, err := deployApplication(context.Background(), c, "fixture-token", DeployRequest{ApplicationName: "app", SourceSHA256: strings.Repeat("a", 64)}, map[string]Deployment{"app": {DeploymentID: "fixture"}}, true)
 	if err == nil {
 		t.Fatal("silently kept a different source")
 	}
