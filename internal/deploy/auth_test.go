@@ -311,3 +311,33 @@ func TestDeploymentPollingRefreshesExpiredCredentialsBeforeRequest(t *testing.T)
 		t.Fatalf("polling result %+v, error %v, refreshes %d requests %d", result, err, refreshes, requests)
 	}
 }
+
+func TestExplicitCredentialDirectoryMustBeAbsolute(t *testing.T) {
+	store := credentialFixture(t)
+	credentialDir = defaultCredentialDir
+	t.Setenv("QUIKDB_FRAME_CONFIG_DIR", "relative-directory")
+	if defaultCredentialDir() != "" {
+		t.Fatal("relative credential path accepted")
+	}
+	if SaveAuth(&AuthConfig{Token: "fixture-access"}) == nil || store.value != "" {
+		t.Fatal("invalid path caused credential storage")
+	}
+	if DeleteAuth() == nil {
+		t.Fatal("invalid path caused credential deletion")
+	}
+	dir := filepath.Join(t.TempDir(), "private-credentials")
+	t.Setenv("QUIKDB_FRAME_CONFIG_DIR", dir)
+	if defaultCredentialDir() != dir {
+		t.Fatal("explicit absolute directory ignored")
+	}
+	if runtime.GOOS == "linux" {
+		store.unavailable = true
+		if err := SaveAuth(&AuthConfig{Token: "fixture-access"}); err != nil {
+			t.Fatal(err)
+		}
+		info, err := os.Stat(filepath.Join(dir, configFile))
+		if err != nil || info.Mode().Perm() != 0600 {
+			t.Fatal("explicit headless store not private")
+		}
+	}
+}

@@ -102,7 +102,9 @@ link on another device and enter the terminal code. Approve only a login you sta
 Access lasts 15 minutes and refreshes automatically within a 30-day session. Logout revokes that
 session. macOS/Windows use native credential storage; Linux uses Secret Service where available
 or a private 0700 directory/0600 file in `~/.quikdb-frame` on headless systems. Desktop storage
-failures do not fall back to plaintext. Older unverified/expired saved tokens require a new login.
+failures do not fall back to plaintext. `QUIKDB_FRAME_CONFIG_DIR` can select an absolute private
+fallback/lock directory for a headless workspace; it does not change the desktop keyring account.
+Older unverified/expired saved tokens require a new login.
 
 For an existing verified user token in CI, supply `QUIKDB_TOKEN` through your CI secret store;
 commands verify it without saving it. A dedicated scoped CI-token lifecycle is still planned.

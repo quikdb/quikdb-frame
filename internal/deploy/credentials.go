@@ -32,7 +32,15 @@ func (osCredentialStore) Delete(service, account string) error {
 }
 
 var credentials credentialStore = osCredentialStore{}
-var credentialDir = func() string {
+var credentialDir = defaultCredentialDir
+
+func defaultCredentialDir() string {
+	if dir := os.Getenv("QUIKDB_FRAME_CONFIG_DIR"); dir != "" {
+		if !filepath.IsAbs(dir) {
+			return ""
+		}
+		return filepath.Clean(dir)
+	}
 	home, _ := os.UserHomeDir()
 	if home == "" {
 		return ""
@@ -99,6 +107,9 @@ func LoadAuth() (*AuthConfig, error) {
 }
 
 func SaveAuth(auth *AuthConfig) error {
+	if credentialDir() == "" {
+		return fmt.Errorf("credential directory must be absolute and available")
+	}
 	if auth == nil || auth.Token == "" {
 		return fmt.Errorf("cannot store empty credentials")
 	}
@@ -146,6 +157,9 @@ func SaveAuth(auth *AuthConfig) error {
 }
 
 func DeleteAuth() error {
+	if credentialDir() == "" {
+		return fmt.Errorf("credential directory must be absolute and available")
+	}
 	keyringErr := credentials.Delete(credentialService, credentialAccount)
 	fileErr := os.Remove(authConfigPath())
 	if errors.Is(keyringErr, keyring.ErrNotFound) {
