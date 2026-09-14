@@ -17,6 +17,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 )
 
 const archiveUploadLimit int64 = 64 << 20
@@ -72,6 +73,10 @@ func packageSource(ctx context.Context, directory string) (_ *sourceArchive, err
 		return nil, fmt.Errorf("cannot open source directory")
 	}
 	defer root.Close()
+	openedRoot, rootErr := root.Lstat(".")
+	if rootErr != nil || !os.SameFile(info, openedRoot) {
+		return nil, fmt.Errorf("source directory changed before packaging")
+	}
 	var nonce [16]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return nil, fmt.Errorf("cannot create private source archive")
@@ -218,7 +223,9 @@ func (c *APIClient) uploadSource(ctx context.Context, token string, archive *sou
 	req.ContentLength = archive.Size
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/gzip")
-	response, err := c.HTTP.Do(req)
+	uploadHTTP := *c.HTTP
+	uploadHTTP.Timeout = 2 * time.Minute
+	response, err := uploadHTTP.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("source upload response unavailable; no automatic retry or deployment was submitted")
 	}
