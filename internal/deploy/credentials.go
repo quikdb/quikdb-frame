@@ -70,6 +70,13 @@ func LoadAuth() (*AuthConfig, error) {
 		if credentialDir() == "" {
 			return nil, fmt.Errorf("could not locate user credential directory")
 		}
+		dirInfo, dirErr := os.Lstat(credentialDir())
+		if dirErr != nil {
+			return nil, dirErr
+		}
+		if !dirInfo.IsDir() || dirInfo.Mode()&os.ModeSymlink != 0 || (runtime.GOOS != "windows" && dirInfo.Mode().Perm()&0077 != 0) {
+			return nil, fmt.Errorf("credential directory must be private and must not be a symbolic link")
+		}
 		path := authConfigPath()
 		info, statErr := os.Lstat(path)
 		if statErr != nil {

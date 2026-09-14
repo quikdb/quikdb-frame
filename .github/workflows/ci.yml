@@ -5,7 +5,7 @@ permissions:
 
 on:
   push:
-    branches: [main, feat/frame-deployment-contracts]
+    branches: [main, feat/frame-deployment-contracts, feat/frame-native-auth]
   pull_request:
     branches: [main]
 

@@ -169,7 +169,13 @@ func TestHeadlessFallbackIsPrivateAndRejectsSymlinks(t *testing.T) {
 	if err := os.Symlink(target, link); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(target, configFile), []byte(`{"token":"fixture-access"}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 	credentialDir = func() string { return link }
+	if _, err := LoadAuth(); err == nil {
+		t.Fatal("read credentials through symlink directory")
+	}
 	if err := SaveAuth(&AuthConfig{Token: "fixture-access"}); err == nil {
 		t.Fatal("accepted symlink credential directory")
 	}
