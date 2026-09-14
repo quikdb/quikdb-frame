@@ -2,6 +2,13 @@
 
 Last updated: 2026-09-14
 
+Pending remote qualification: feat/frame-cli-management adds ID-based status/inspect/logs/
+history/lifecycle/config/resources/environment/domain management through dashboard APIs.
+See docs/CLI_MANAGEMENT.md. Safe public detail excludes env values/bundled logs; env set reads
+explicit file/stdin and redacts values, export creates a new private POSIX/Windows file.
+API ownership/scope/resource prerequisites deploy before releasing these commands. Human CLI
+management is not delegated agent/database access. Full source/artifact/rollback fencing pending.
+
 Developer CLI and Go/Preact service scaffolding. The separate quikdb-cli-go binary is the
 node/operator runner. Frame releases are distributed through GitHub Releases, not EKS.
 

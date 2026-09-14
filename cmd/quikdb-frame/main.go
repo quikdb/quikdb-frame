@@ -107,8 +107,8 @@ func main() {
 			os.Exit(1)
 		}
 
-	case "status":
-		if err := deploy.Status(); err != nil {
+	case "status", "inspect", "logs", "history", "stop", "restart", "redeploy", "wake", "rollback", "delete", "config", "resources", "env", "domains":
+		if err := deploy.Manage(cmd, os.Args[2:]); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -175,6 +175,16 @@ Commands:
   logout                   Log out
   deploy [service]         Deploy a Frame project or existing application
   status                   Show deployment status
+  inspect <id>             Show public deployment detail (environment values omitted)
+  logs <id> [--follow]      Read recent logs; --json follow produces JSON lines
+  history <id>             Show deployment timeline (not rollback indices)
+  stop|restart|redeploy|wake <id>  Manage the same dashboard deployment
+  rollback <id> --version <n>     Restore retained previous version, 0 = most recent
+  delete <id> --yes         Delete this exact application
+  config get|set <id>       Read settings or save --file JSON patch
+  resources get|set <id>    Read allocation or set --cpu and/or --ram (MB)
+  env list|set|remove|export <id>  Manage env; set requires KEY --value-file or --stdin
+  domains list|add|remove|verify|repair <id>  Manage app domains, subject to plan limits
   whoami                   Show authenticated account and plan
   convert <path> --from <framework>  Convert existing project
   upgrade                  Upgrade to the latest version

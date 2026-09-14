@@ -52,6 +52,10 @@ conversion remains unavailable until preservation checks pass.
 
 ## Deploy an existing application
 
+ID-based app management is being qualified in `docs/CLI_MANAGEMENT.md`: status/inspect,
+logs/history, lifecycle, settings/resources, env and domains use the same dashboard APIs.
+Follow its exact-source release evidence before relying on a new command in automation.
+
 From the existing application's Git working tree, `quikdb-frame deploy` uses its origin and
 current branch. No Frame manifest or source rewrite is required. To deploy another repository:
 

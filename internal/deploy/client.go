@@ -20,18 +20,27 @@ type APIClient struct {
 }
 
 func newAPIClient() *APIClient {
-	return &APIClient{BaseURL: apiBase, HTTP: &http.Client{Timeout: 30 * time.Second}, TokenProvider: RequireAuth}
+	return &APIClient{BaseURL: apiBase, HTTP: &http.Client{Timeout: 30 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, TokenProvider: RequireAuth}
 }
 
 type Deployment struct {
-	DeploymentID     string `json:"deploymentId"`
-	ApplicationName  string `json:"applicationName"`
-	Status           string `json:"status"`
-	PublicURL        string `json:"publicUrl"`
-	FailureReason    string `json:"failureReason"`
-	RepositoryURL    string `json:"repositoryUrl"`
-	RepositoryBranch string `json:"repositoryBranch"`
-	Subdirectory     string `json:"subdirectory"`
+	ApplicationID    string            `json:"_id,omitempty"`
+	DeploymentID     string            `json:"deploymentId"`
+	ApplicationName  string            `json:"applicationName"`
+	Status           string            `json:"status"`
+	PublicURL        string            `json:"publicUrl"`
+	FailureReason    string            `json:"failureReason"`
+	RepositoryURL    string            `json:"repositoryUrl"`
+	RepositoryBranch string            `json:"repositoryBranch"`
+	Subdirectory     string            `json:"subdirectory"`
+	CommitHash       string            `json:"commitHash,omitempty"`
+	Configuration    *ManagementConfig `json:"configuration,omitempty"`
+	Subdomain        string            `json:"subdomain,omitempty"`
+	AutoDeploy       *struct {
+		Enabled bool   `json:"enabled"`
+		Branch  string `json:"branch"`
+	} `json:"autoDeploy,omitempty"`
 }
 
 type apiEnvelope struct {
@@ -42,6 +51,17 @@ type apiEnvelope struct {
 }
 
 func (c *APIClient) request(ctx context.Context, token, method, path string, payload interface{}) (json.RawMessage, error) {
+	envelope, err := c.jsonRequest(ctx, token, method, "/api/v1/deployment"+path, payload)
+	if err != nil {
+		return nil, err
+	}
+	if len(envelope.Data) == 0 || string(envelope.Data) == "null" {
+		return nil, fmt.Errorf("API response missing data")
+	}
+	return envelope.Data, nil
+}
+
+func (c *APIClient) rawRequest(ctx context.Context, token, method, path string, payload interface{}) ([]byte, error) {
 	if c.TokenProvider != nil {
 		current, err := c.TokenProvider()
 		if err != nil {
@@ -57,7 +77,7 @@ func (c *APIClient) request(ctx context.Context, token, method, path string, pay
 		}
 		body = bytes.NewReader(encoded)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.BaseURL, "/")+"/api/v1/deployment"+path, body)
+	req, err := http.NewRequestWithContext(ctx, method, strings.TrimRight(c.BaseURL, "/")+path, body)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +99,7 @@ func (c *APIClient) request(ctx context.Context, token, method, path string, pay
 		return nil, fmt.Errorf("API response exceeds size limit")
 	}
 	var envelope apiEnvelope
-	decodeErr := json.Unmarshal(raw, &envelope)
+	_ = json.Unmarshal(raw, &envelope)
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		message := envelope.Message
 		if message == "" {
@@ -96,16 +116,25 @@ func (c *APIClient) request(ctx context.Context, token, method, path string, pay
 		}
 		return nil, fmt.Errorf("deployment API (%d): %s", resp.StatusCode, message)
 	}
-	if decodeErr != nil {
-		return nil, fmt.Errorf("invalid API response: %w", decodeErr)
+	if strings.HasSuffix(path, "/env/export") && !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/plain") {
+		return nil, fmt.Errorf("unexpected environment export response type")
+	}
+	return raw, nil
+}
+
+func (c *APIClient) jsonRequest(ctx context.Context, token, method, path string, payload interface{}) (*apiEnvelope, error) {
+	raw, err := c.rawRequest(ctx, token, method, path, payload)
+	if err != nil {
+		return nil, err
+	}
+	var envelope apiEnvelope
+	if err := json.Unmarshal(raw, &envelope); err != nil {
+		return nil, fmt.Errorf("invalid API response: %w", err)
 	}
 	if !envelope.Success {
 		return nil, fmt.Errorf("deployment API rejected request: %s", envelope.Message)
 	}
-	if len(envelope.Data) == 0 || string(envelope.Data) == "null" {
-		return nil, fmt.Errorf("API response missing data")
-	}
-	return envelope.Data, nil
+	return &envelope, nil
 }
 
 func (c *APIClient) List(ctx context.Context, token string) ([]Deployment, error) {
