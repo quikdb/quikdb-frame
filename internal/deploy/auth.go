@@ -1,14 +1,13 @@
 package deploy
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
-	"net"
+	"io"
 	"net/http"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"time"
 )
 
@@ -20,153 +19,178 @@ const (
 )
 
 type AuthConfig struct {
-	Token     string `json:"token"`
-	Email     string `json:"email,omitempty"`
-	ExpiresAt string `json:"expiresAt,omitempty"`
+	Token            string `json:"token"`
+	RefreshToken     string `json:"refreshToken,omitempty"`
+	Email            string `json:"email,omitempty"`
+	WalletAddress    string `json:"walletAddress,omitempty"`
+	ExpiresAt        string `json:"expiresAt,omitempty"`
+	SessionExpiresAt string `json:"sessionExpiresAt,omitempty"`
 }
 
-// Login opens the browser for QuikDB auth and captures the token via local callback.
-func Login() error {
-	existing, _ := LoadAuth()
-	if existing != nil && existing.Token != "" {
-		fmt.Println("Already logged in.")
-		fmt.Println("Run 'quikdb-frame logout' to switch accounts.")
-		return nil
-	}
+type authClient struct {
+	BaseURL string
+	HTTP    *http.Client
+}
 
-	// Start a local HTTP server to receive the auth callback
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+var authClientFactory = func() *authClient { return &authClient{apiBase, &http.Client{Timeout: 30 * time.Second}} }
+
+type authAPIError struct {
+	Status int
+	Code   string
+}
+
+func (e *authAPIError) Error() string {
+	return fmt.Sprintf("CLI authentication (%d): %s", e.Status, e.Code)
+}
+
+func (c *authClient) request(ctx context.Context, method, path, token string, payload, result interface{}) error {
+	var body io.Reader
+	if payload != nil {
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		body = bytes.NewReader(encoded)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.BaseURL+"/api/auth/cli/"+path, body)
 	if err != nil {
-		return fmt.Errorf("could not start local auth server: %w", err)
-	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	callbackURL := fmt.Sprintf("http://localhost:%d/callback", port)
-
-	tokenCh := make(chan string, 1)
-	errCh := make(chan error, 1)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		token := r.URL.Query().Get("token")
-		if token == "" {
-			w.WriteHeader(400)
-			fmt.Fprint(w, "No token received. Please try again.")
-			errCh <- fmt.Errorf("no token in callback")
-			return
-		}
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, `<html><body style="font-family:system-ui;display:flex;justify-content:center;align-items:center;height:100vh;margin:0">
-			<div style="text-align:center">
-				<h2>Logged in to QuikDB</h2>
-				<p>You can close this window and return to your terminal.</p>
-			</div>
-		</body></html>`)
-		tokenCh <- token
-	})
-
-	server := &http.Server{Handler: mux}
-	go server.Serve(listener)
-	defer server.Close()
-
-	// Open browser to QuikDB Compute login with callback
-	loginURL := fmt.Sprintf("%s/cli-auth?callback=%s", computeBase, callbackURL)
-	fmt.Printf("Opening browser to log in...\n")
-	fmt.Printf("If the browser doesn't open, visit:\n%s\n\n", loginURL)
-	openBrowser(loginURL)
-
-	fmt.Println("Waiting for authentication...")
-
-	// Wait for token or timeout
-	select {
-	case token := <-tokenCh:
-		auth := &AuthConfig{
-			Token:     token,
-			ExpiresAt: time.Now().Add(30 * 24 * time.Hour).Format(time.RFC3339),
-		}
-		if err := SaveAuth(auth); err != nil {
-			return fmt.Errorf("failed to save auth: %w", err)
-		}
-		fmt.Println("Logged in successfully.")
-		return nil
-
-	case err := <-errCh:
 		return err
-
-	case <-time.After(2 * time.Minute):
-		return fmt.Errorf("login timed out after 2 minutes")
 	}
-}
-
-// LoginWithToken saves a manually provided API token.
-func LoginWithToken(token string) error {
-	auth := &AuthConfig{
-		Token:     token,
-		ExpiresAt: time.Now().Add(30 * 24 * time.Hour).Format(time.RFC3339),
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
-	if err := SaveAuth(auth); err != nil {
-		return fmt.Errorf("failed to save auth: %w", err)
-	}
-	fmt.Println("Token saved. You are now logged in.")
-	return nil
-}
-
-func Logout() error {
-	configPath := authConfigPath()
-	os.Remove(configPath)
-	fmt.Println("Logged out.")
-	return nil
-}
-
-func LoadAuth() (*AuthConfig, error) {
-	data, err := os.ReadFile(authConfigPath())
+	response, err := c.HTTP.Do(req)
 	if err != nil {
-		return nil, err
+		return fmt.Errorf("CLI authentication request failed: %w", err)
 	}
-	var auth AuthConfig
-	if err := json.Unmarshal(data, &auth); err != nil {
-		return nil, err
+	defer response.Body.Close()
+	raw, err := io.ReadAll(io.LimitReader(response.Body, 65537))
+	if err != nil {
+		return err
 	}
-	return &auth, nil
+	if len(raw) > 65536 {
+		return fmt.Errorf("authentication response too large")
+	}
+	var envelope struct {
+		Success bool            `json:"success"`
+		Data    json.RawMessage `json:"data"`
+		Error   string          `json:"error"`
+	}
+	decodeErr := json.Unmarshal(raw, &envelope)
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		if envelope.Error == "" {
+			envelope.Error = http.StatusText(response.StatusCode)
+		}
+		return &authAPIError{response.StatusCode, envelope.Error}
+	}
+	if decodeErr != nil {
+		return fmt.Errorf("invalid authentication response: %w", decodeErr)
+	}
+	if !envelope.Success || len(envelope.Data) == 0 || string(envelope.Data) == "null" {
+		return fmt.Errorf("authentication response did not confirm success")
+	}
+	if result != nil {
+		return json.Unmarshal(envelope.Data, result)
+	}
+	return nil
 }
 
-func SaveAuth(auth *AuthConfig) error {
-	dir := filepath.Join(homeDir(), configDir)
-	os.MkdirAll(dir, 0700)
-	data, _ := json.MarshalIndent(auth, "", "  ")
-	return os.WriteFile(filepath.Join(dir, configFile), data, 0600)
+type authProfile struct {
+	Email           string `json:"email"`
+	WalletAddress   string `json:"walletAddress"`
+	Tier            string `json:"tier"`
+	AccessExpiresAt string `json:"accessExpiresAt"`
+}
+
+func LoginWithToken(token string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var profile authProfile
+	if err := authClientFactory().request(ctx, "GET", "me", token, nil, &profile); err != nil {
+		return err
+	}
+	if profile.WalletAddress == "" {
+		return fmt.Errorf("authentication response missing account identity")
+	}
+	if err := SaveAuth(&AuthConfig{Token: token, Email: profile.Email, WalletAddress: profile.WalletAddress, ExpiresAt: profile.AccessExpiresAt}); err != nil {
+		return err
+	}
+	fmt.Println("Verified token saved.")
+	return nil
+}
+
+func Whoami() error {
+	token, err := RequireAuth()
+	if err != nil {
+		return err
+	}
+	var profile authProfile
+	if err := authClientFactory().request(context.Background(), "GET", "me", token, nil, &profile); err != nil {
+		return err
+	}
+	fmt.Printf("%s (%s), plan: %s\n", profile.Email, profile.WalletAddress, profile.Tier)
+	return nil
 }
 
 func RequireAuth() (string, error) {
 	if token := os.Getenv("QUIKDB_TOKEN"); token != "" {
+		if err := authClientFactory().request(context.Background(), "GET", "me", token, nil, &authProfile{}); err != nil {
+			return "", err
+		}
 		return token, nil
 	}
 	auth, err := LoadAuth()
 	if err != nil || auth.Token == "" {
-		return "", fmt.Errorf("not logged in. Run: quikdb-frame login")
+		return "", fmt.Errorf("not logged in; run quikdb-frame login")
 	}
-	return auth.Token, nil
+	if tokenCurrent(auth) {
+		return auth.Token, nil
+	}
+	if auth.RefreshToken == "" {
+		return "", fmt.Errorf("saved token has expired; run quikdb-frame login")
+	}
+	return refreshAuth()
 }
 
-func authConfigPath() string {
-	return filepath.Join(homeDir(), configDir, configFile)
+func tokenCurrent(auth *AuthConfig) bool {
+	expires, err := time.Parse(time.RFC3339, auth.ExpiresAt)
+	return err == nil && time.Until(expires) > time.Minute
 }
 
-func homeDir() string {
-	home, _ := os.UserHomeDir()
-	return home
+type tokenResponse struct {
+	AccessToken      string `json:"accessToken"`
+	RefreshToken     string `json:"refreshToken"`
+	ExpiresIn        int    `json:"expiresIn"`
+	SessionExpiresAt string `json:"sessionExpiresAt"`
+	AccessExpiresAt  string `json:"accessExpiresAt"`
+	WalletAddress    string `json:"walletAddress"`
+	Email            string `json:"email"`
 }
 
-func openBrowser(url string) {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", url)
-	case "linux":
-		cmd = exec.Command("xdg-open", url)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+func saveTokens(tokens tokenResponse) error {
+	expiry, expiryErr := time.Parse(time.RFC3339, tokens.AccessExpiresAt)
+	if tokens.AccessToken == "" || tokens.RefreshToken == "" || tokens.WalletAddress == "" || tokens.ExpiresIn <= 0 || expiryErr != nil || time.Until(expiry) <= 0 {
+		return fmt.Errorf("authentication response missing valid session credentials")
 	}
-	if cmd != nil {
-		cmd.Start()
+	return SaveAuth(&AuthConfig{
+		Token: tokens.AccessToken, RefreshToken: tokens.RefreshToken, Email: tokens.Email, WalletAddress: tokens.WalletAddress,
+		ExpiresAt: tokens.AccessExpiresAt, SessionExpiresAt: tokens.SessionExpiresAt,
+	})
+}
+
+func Logout() error {
+	auth, _ := LoadAuth()
+	var revokeErr error
+	if auth != nil && auth.RefreshToken != "" {
+		revokeErr = authClientFactory().request(context.Background(), "POST", "logout", "", map[string]string{"refreshToken": auth.RefreshToken}, nil)
 	}
+	if err := DeleteAuth(); err != nil {
+		return fmt.Errorf("could not clear credentials: %w", err)
+	}
+	if revokeErr != nil {
+		return fmt.Errorf("local credentials cleared, but server revocation failed: %w", revokeErr)
+	}
+	fmt.Println("Logged out.")
+	return nil
 }

@@ -1,0 +1,39 @@
+name: Native CLI Auth Validation
+on:
+  push:
+    branches: [feat/frame-native-auth]
+  pull_request:
+    paths:
+      - internal/deploy/**
+      - go.mod
+      - go.sum
+      - cmd/quikdb-frame/**
+      - .github/workflows/native-auth.yml
+permissions:
+  contents: read
+concurrency:
+  group: frame-native-auth-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
+      - name: Resolve and report public module checksums
+        run: |
+          go mod tidy
+          cat go.mod
+          cat go.sum
+      - name: Test credentials and callbacks
+        run: |
+          go test -race ./...
+          go vet ./...
+          for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            GOOS=${platform%/*} GOARCH=${platform#*/} go build -o /tmp/frame-auth-build ./cmd/quikdb-frame
+          done
+      - name: Check reachable vulnerabilities
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...

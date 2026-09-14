@@ -74,6 +74,12 @@ func main() {
 		}
 
 	case "login":
+		device := false
+		for _, arg := range os.Args[2:] {
+			if arg == "--device" {
+				device = true
+			}
+		}
 		// Prefer QUIKDB_TOKEN env var — safe for CI/CD, not visible in ps aux or shell history
 		token := os.Getenv("QUIKDB_TOKEN")
 
@@ -89,6 +95,8 @@ func main() {
 		var err error
 		if token != "" {
 			err = deploy.LoginWithToken(token)
+		} else if device {
+			err = deploy.LoginDevice()
 		} else {
 			err = deploy.Login()
 		}
@@ -105,6 +113,12 @@ func main() {
 
 	case "status":
 		if err := deploy.Status(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
+	case "whoami":
+		if err := deploy.Whoami(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -160,10 +174,12 @@ Commands:
   add <type> <name>        Add a service (api, ws, worker, web)
   dev [service]            Run services locally with hot reload
   login                    Log in to QuikDB Compute
+  login --device           Authorize a remote/headless terminal
   login --token <token>    Log in with an API token (see warning below)
   logout                   Log out
   deploy [service]         Deploy to QuikDB Compute
   status                   Show deployment status
+  whoami                   Show authenticated account and plan
   convert <path> --from <framework>  Convert existing project
   upgrade                  Upgrade to the latest version
   version                  Print version
