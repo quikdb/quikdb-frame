@@ -88,10 +88,12 @@ cross-context Dockerfile/target and versioned shared manifest contracts remain s
 
 Source/settings qualification: runtime 6d59d6e passed full 34843649175, native/desktop/security 34843649225 and main 34843947357. API final 40b747e passed 140 tests (34844097886), production 34844237593 healthy at generation 247/two ready replicas. v0.1.14 tagged on that exact CLI source; signed release34844547094 and actual published Linux/macOS/Windows34844788753 passed. Fresh live account fixtures remain separate. README reflects the directory-detection change. No complete WP2 or conversion certification.
 
-## Deployment manifest v1 — qualification pending
+## Deployment manifest v1 — v0.1.15 qualified
 
 Canonical contracts/deployment-manifest-v1.schema.json and shared acceptance cases define a single-service as-is quikdb.json, separate from native quikdb.yaml. V1 requires runtime, original install/build/start commands and port; strict unknown fields/versions, no environment values/source/agent grants. Optional framework/health default to empty and /. Node version is major-only (1–99), with cross-field consistency enforced at runtime. Runtime availability remains separately qualified.
 
 CLI manifest validate --file quikdb.json --json runs offline and reports metadata only. --config accepts v1 and legacy explicit Compute objects; v1 normalizes runtime to appType and strips schema metadata before API submission. Explicit --port wins. Invalid/bounded/nonregular files fail before authentication. Shared API corpus and public JSON Schema checks, remote Go/native/desktop gates must pass before release. Immutable sources/full stored precedence/context and conversion remain pending.
 
 Remote qualification: d287a76 full34846859517/native34846859537 passed, public schema39 cases and real macOS/Windows checks passed. API d08f609 shared pinned contracts plus nine suites/186 tests34846944145 passed; production rollout pending. Published-platform workflow can opt into actual offline manifest success/unsupported-version rejection on all three OSes after the tagged release.
+
+Final runtime de867b723832f5f681c5c02c9c6665450094cbd0 passed full/native34847304717/34847304730 and main34847715726. Tagged v0.1.15 signed release34847937129 passed. Actual published Linux/macOS/Windows34848153626 passed checksum/provenance/version/self-upgrade plus offline manifest success and sanitized unsupported-version rejection; manifest input enabled for all jobs. Linux x64 checksum7403e5e5508721bab9cd018e8648219265e0b24ddd5707746f23ff41197f886b. API prerequisite deployed generation248/two ready. Offline checks need no fixture session; fresh authenticated live remains separate.
