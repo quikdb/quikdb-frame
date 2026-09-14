@@ -1,0 +1,47 @@
+name: Published CLI Platform Validation
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Exact latest stable release to validate
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  published:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      FRAME_TEST_TAG: ${{ inputs.tag }}
+    steps:
+      - name: Verify published download, provenance and actual self-upgrade
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$FRAME_TEST_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(gh api repos/quikdb/quikdb-frame/releases/latest --jq .tag_name)" = "$FRAME_TEST_TAG"
+          case "$RUNNER_OS/$RUNNER_ARCH" in
+            Linux/X64) asset=quikdb-frame-linux-amd64 ;;
+            macOS/ARM64) asset=quikdb-frame-darwin-arm64 ;;
+            macOS/X64) asset=quikdb-frame-darwin-amd64 ;;
+            Windows/X64) asset=quikdb-frame-windows-amd64.exe ;;
+            *) echo 'Unsupported validation platform'; exit 1 ;;
+          esac
+          mkdir release-smoke
+          cd release-smoke
+          gh release download "$FRAME_TEST_TAG" --repo quikdb/quikdb-frame --pattern "$asset" --pattern SHA256SUMS
+          awk -v file="$asset" '$2 == file {print; found++} END {if (found != 1) exit 1}' SHA256SUMS > selected-sum
+          if command -v sha256sum >/dev/null; then sha256sum -c selected-sum; else shasum -a 256 -c selected-sum; fi
+          gh attestation verify "$asset" --repo quikdb/quikdb-frame --signer-workflow quikdb/quikdb-frame/.github/workflows/release.yml --source-ref "refs/tags/$FRAME_TEST_TAG"
+          chmod +x "$asset"
+          test "$(./"$asset" version)" = "quikdb-frame $FRAME_TEST_TAG"
+          ./"$asset" upgrade
+          test "$(./"$asset" version)" = "quikdb-frame $FRAME_TEST_TAG"
+          if command -v sha256sum >/dev/null; then sha256sum -c selected-sum; else shasum -a 256 -c selected-sum; fi
+          printf '%s published CLI checksum/provenance/version/self-upgrade passed.\n' "$RUNNER_OS" >> "$GITHUB_STEP_SUMMARY"

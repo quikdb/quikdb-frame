@@ -34,6 +34,8 @@ jobs:
           for platform in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
             GOOS=${platform%/*} GOARCH=${platform#*/} go build -o /tmp/frame-auth-build ./cmd/quikdb-frame
           done
+      - name: Verify installer fixtures
+        run: sh scripts/install_test.sh
       - name: Check reachable vulnerabilities
         run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
   desktop-credentials:

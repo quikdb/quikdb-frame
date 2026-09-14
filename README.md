@@ -30,8 +30,10 @@ claiming savings. Cross-framework business logic and dependencies can change tho
 ## Quick Start
 
 ```bash
-# Install the CLI
-go install github.com/quikdb/quikdb-frame/cmd/quikdb-frame@latest
+# Install a verified release without Go (macOS/Linux; default: ~/.local/bin)
+curl -fsSL https://github.com/quikdb/quikdb-frame/releases/latest/download/install.sh -o /tmp/quikdb-frame-install.sh
+sh /tmp/quikdb-frame-install.sh --verify-provenance # requires gh; omit for checksum-only verification
+export PATH="$HOME/.local/bin:$PATH"
 
 # Create a new project
 quikdb-frame init my-app
@@ -82,7 +84,9 @@ Download the binary for your platform and `SHA256SUMS` from the same tagged
 before installing it on your PATH. From v0.1.10, releases include signed build provenance;
 verify it with `gh attestation verify <binary> --repo quikdb/quikdb-frame --signer-workflow
 quikdb/quikdb-frame/.github/workflows/release.yml`. The CLI upgrade currently verifies checksums;
-automatic provenance verification and a complete installer remain planned. Connect through Compute:
+automatic in-CLI provenance verification remains planned. The macOS/Linux installer verifies
+checksums and can require signed provenance with `--verify-provenance`. Pin a version with
+`--version v0.1.11`; set `QUIKDB_FRAME_INSTALL_DIR` for a custom installation directory. Connect through Compute:
 
 ```text
 quikdb-frame login
