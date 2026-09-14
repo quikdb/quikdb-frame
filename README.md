@@ -43,7 +43,35 @@ cd my-app && quikdb-frame dev
 quikdb-frame deploy
 ```
 
-> **Note:** `quikdb-frame deploy` is for **first-time deploys only**. Once your services are live, push to your main branch — QuikDB Compute auto-redeploys on every push. Running `quikdb-frame deploy` again on an existing project will be skipped for services that are already live.
+`deploy` creates services, observes active builds and retries failed/stopped/sleeping services
+using the same deployment ID. Once live, push to the connected branch for Git auto-deployment.
+The current CLI deploys Frame layouts; ordinary application deployment is the next work package.
+
+## CLI sign-in
+
+Download the binary for your platform and `SHA256SUMS` from the same tagged
+[release](https://github.com/quikdb/quikdb-frame/releases/latest). Verify its SHA-256 checksum
+before installing it on your PATH. From v0.1.10, connect through Compute:
+
+```text
+quikdb-frame login
+quikdb-frame whoami
+quikdb-frame deploy
+quikdb-frame logout
+```
+
+Approve the terminal in Compute using your existing dashboard account, or sign in with an email
+verification code. A remote/headless terminal uses `quikdb-frame login --device`: open the displayed
+link on another device and enter the terminal code. Approve only a login you started.
+
+Access lasts 15 minutes and refreshes automatically within a 30-day session. Logout revokes that
+session. macOS/Windows use native credential storage; Linux uses Secret Service where available
+or a private 0700 directory/0600 file in `~/.quikdb-frame` on headless systems. Desktop storage
+failures do not fall back to plaintext. Older unverified/expired saved tokens require a new login.
+
+For an existing verified user token in CI, supply `QUIKDB_TOKEN` through your CI secret store;
+commands verify it without saving it. A dedicated scoped CI-token lifecycle is still planned.
+Never put tokens in URLs or commit them. Node/operator tokens belong to the separate node CLI.
 
 ## How It Works
 
@@ -69,7 +97,8 @@ quikdb-frame add ws chat        # Add WebSocket chat
 quikdb-frame add worker email   # Add email background worker
 ```
 
-Each service compiles to a single static Go binary. No node_modules. No pip packages. No interpreted runtime in production. Ever.
+Native Frame services compile to Go binaries; frontend dependencies are used during asset builds.
+Existing applications keep their original runtime when deployed as-is.
 
 ## Principles
 
