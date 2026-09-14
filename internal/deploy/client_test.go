@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -172,6 +174,25 @@ func TestDeployNameCollisionCannotMutateOtherApplication(t *testing.T) {
 }
 
 func TestDeployDoesNotUploadEnvironmentFiles(t *testing.T) {
+	dir := t.TempDir()
+	oldDir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("PRIVATE_KEY=fixture-secret\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env.example"), []byte("DATABASE_URL=sample-default\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(oldDir); err != nil {
+			t.Error(err)
+		}
+	})
 	var request DeployRequest
 	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPost {
@@ -183,7 +204,7 @@ func TestDeployDoesNotUploadEnvironmentFiles(t *testing.T) {
 			fmt.Fprint(w, `{"success":true,"data":{"deployment":{"deploymentId":"id","status":"live"}}}`)
 		}
 	})
-	_, err := deployService(context.Background(), c, "fixture-token", "https://github.com/team/app", "main", ServiceConfig{Name: "api", DirName: "api", Type: "api"}, nil)
+	_, err = deployService(context.Background(), c, "fixture-token", "https://github.com/team/app", "main", ServiceConfig{Name: "api", DirName: "api", Type: "api"}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

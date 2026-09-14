@@ -31,9 +31,6 @@ type Deployment struct {
 	RepositoryURL    string `json:"repositoryUrl"`
 	RepositoryBranch string `json:"repositoryBranch"`
 	Subdirectory     string `json:"subdirectory"`
-	Configuration    struct {
-		Subdirectory string `json:"subdirectory"`
-	} `json:"configuration"`
 }
 
 type apiEnvelope struct {

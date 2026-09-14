@@ -2,7 +2,7 @@ name: CI — Build, Test & Benchmark
 
 on:
   push:
-    branches: [main]
+    branches: [main, feat/frame-deployment-contracts]
   pull_request:
     branches: [main]
 
