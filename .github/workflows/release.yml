@@ -7,6 +7,8 @@ on:
 
 permissions:
   contents: write
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -48,34 +50,40 @@ jobs:
           printf 'Release commit: %s\n' "$GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
           cat SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Sign build provenance
+        id: provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: 'dist/quikdb-frame-*'
+
+      - name: Verify signed provenance before publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FRAME_PROVENANCE_BUNDLE: ${{ steps.provenance.outputs.bundle-path }}
+        run: |
+          for binary in dist/quikdb-frame-*; do
+            gh attestation verify "$binary" --repo quikdb/quikdb-frame \
+              --signer-workflow quikdb/quikdb-frame/.github/workflows/release.yml \
+              --source-digest "$GITHUB_SHA" --bundle "$FRAME_PROVENANCE_BUNDLE"
+          done
+          cp "$FRAME_PROVENANCE_BUNDLE" dist/provenance.sigstore.jsonl
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
           generate_release_notes: true
           body: |
-            ## Install
+            Download your platform binary and SHA256SUMS from this same tagged release.
+            Verify the binary checksum before installing it on your PATH.
 
-            **macOS (Apple Silicon)**
-            ```bash
-            curl -L https://github.com/quikdb/quikdb-frame/releases/latest/download/quikdb-frame-darwin-arm64 -o /usr/local/bin/quikdb-frame
-            chmod +x /usr/local/bin/quikdb-frame
+            This release also publishes signed build provenance. With GitHub CLI:
+            ```text
+            gh attestation verify <downloaded-binary> --repo quikdb/quikdb-frame --signer-workflow quikdb/quikdb-frame/.github/workflows/release.yml
             ```
+            The provenance.sigstore.jsonl asset can also be supplied with --bundle.
+            CLI upgrade verifies checksums; automatic in-CLI provenance verification remains planned.
 
-            **macOS (Intel)**
-            ```bash
-            curl -L https://github.com/quikdb/quikdb-frame/releases/latest/download/quikdb-frame-darwin-amd64 -o /usr/local/bin/quikdb-frame
-            chmod +x /usr/local/bin/quikdb-frame
-            ```
-
-            **Linux**
-            ```bash
-            curl -L https://github.com/quikdb/quikdb-frame/releases/latest/download/quikdb-frame-linux-amd64 -o /usr/local/bin/quikdb-frame
-            chmod +x /usr/local/bin/quikdb-frame
-            ```
-
-            **Windows (PowerShell)**
-            ```powershell
-            Invoke-WebRequest -Uri https://github.com/quikdb/quikdb-frame/releases/latest/download/quikdb-frame-windows-amd64.exe -OutFile quikdb-frame.exe
-            Move-Item quikdb-frame.exe $env:USERPROFILE\quikdb-frame.exe
-            ```
+            Connect through Compute with `quikdb-frame login`, or `quikdb-frame login --device`
+            for a remote terminal. Approve only a login you started. See README for credential
+            storage, session expiry and current deployment/conversion support.

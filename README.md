@@ -51,7 +51,10 @@ The current CLI deploys Frame layouts; ordinary application deployment is the ne
 
 Download the binary for your platform and `SHA256SUMS` from the same tagged
 [release](https://github.com/quikdb/quikdb-frame/releases/latest). Verify its SHA-256 checksum
-before installing it on your PATH. From v0.1.10, connect through Compute:
+before installing it on your PATH. From v0.1.10, releases include signed build provenance;
+verify it with `gh attestation verify <binary> --repo quikdb/quikdb-frame --signer-workflow
+quikdb/quikdb-frame/.github/workflows/release.yml`. The CLI upgrade currently verifies checksums;
+automatic provenance verification and a complete installer remain planned. Connect through Compute:
 
 ```text
 quikdb-frame login
