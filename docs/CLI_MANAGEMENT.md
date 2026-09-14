@@ -101,3 +101,12 @@ need a disposable domain and an eligible plan; never alter an unrelated producti
 
 New source is not a release qualification until the exact revision's remote gates pass. Full
 source/settings parity, Frame core, preserved conversion and managed databases remain separate.
+
+## Approve management permissions
+
+Version 0.1.13 requests deployment, environment, and domain permissions during a new login.
+The connection page discloses environment secret export before approval. Existing sessions
+retain deployment-only permission, including after refresh. To use environment or domain
+commands with an older session, run `quikdb-frame logout`, then `quikdb-frame login`
+(or `login --device`) and approve the displayed permissions. These human CLI permissions
+are separate from the planned agent infrastructure and application-data permissions.
