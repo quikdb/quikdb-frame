@@ -4,6 +4,10 @@ The operating system for QuikDB applications.
 
 quikdb-frame defines how apps are structured, built, deployed, scaled, and observed on [QuikDB Compute](https://compute.quikdb.com). It is not a framework — it is bigger than a framework.
 
+Implementation is in progress. [Capability ledger](CAPABILITIES.md) records the source and
+acceptance gate for every specification section. [Deployment contracts](DOCS.md) describe the
+current CLI behavior. Adapters and automatic business-logic conversion remain under development.
+
 ## What It Does
 
 | What | How |
@@ -11,21 +15,17 @@ quikdb-frame defines how apps are structured, built, deployed, scaled, and obser
 | **Structure** | Opinionated project layout with shared code and independent services |
 | **Build** | Compiles Go services into static binaries. No runtime, no interpreter. |
 | **Deploy** | One command to deploy all services to QuikDB Compute |
-| **Auth** | JWT, OAuth, OTP, API keys — built-in adapters, configurable providers |
-| **Payments** | 7 payment gateways with config-driven currency routing |
+| **Auth** | Generated JWT examples; complete provider adapters are planned |
+| **Payments** | Provider adapter suite is planned |
 | **Observability** | Structured logging, request ID propagation, health checks |
 | **Real-time** | Native WebSocket with gateway + worker architecture |
 
-## Why
+## Size targets
 
-| Metric | Next.js / NestJS | quikdb-frame |
-|---|---|---|
-| Docker image | 200-800 MB | < 15 MB per service |
-| RAM at idle | 60-150 MB | < 10 MB per service |
-| Cold start | 2-5 seconds | < 200 ms |
-| Dependencies in prod | 500+ MB node_modules | Zero. Single binary. |
-
-A full quikdb-frame app (4 API services, 1 web, 2 WebSocket, 2 workers) uses less total resources than a single Next.js app.
+Go services use multi-stage builds with a static binary and CA certificates in a scratch image.
+The web service builds frontend assets separately and serves them with Go. Size, memory and
+startup goals are in [SPEC.md](SPEC.md#size-targets); measure each real application before
+claiming savings. Cross-framework business logic and dependencies can change those results.
 
 ## Quick Start
 
@@ -83,25 +83,22 @@ Each service compiles to a single static Go binary. No node_modules. No pip pack
 
 ## Convert Existing Apps
 
-Already have an Express, Next.js, or NestJS app? Convert it:
+The current Express/Flask command scans routes and generates a migration scaffold with
+handler stubs. It does **not** preserve existing business logic. Review and implement every
+handler before use; automatic conversion will be released only for independently tested subsets.
 
 ```bash
 quikdb-frame convert ./my-express-app --from express
 
-# Scanning project...
-# Found: 12 routes, 4 middleware, 3 models
-# Converting...
-# Done. Output: ./my-express-app-converted/
-#
-# Before: 340MB image, 2.5s cold start, 80MB RAM
-# After:  11MB image, 60ms cold start, 6MB RAM
+# Output contains handler stubs that require manual implementation.
 ```
 
-Supported sources: Express, Next.js, NestJS, FastAPI, Django, Flask, Gin, Fiber, Spring Boot, Laravel.
+Route-scaffold scanners: Express and Flask. Other framework converters in SPEC.md are planned.
 
 ## Built-in Integrations
 
-quikdb-frame provides adapters — you choose which ones to use.
+The following adapter catalog is planned and tracked in [CAPABILITIES.md](CAPABILITIES.md).
+These providers are not all implemented by the generated application.
 
 **Auth:** Google, Apple, GitHub, Facebook, Twitter/X, Discord OAuth + Twilio, Vonage, SNS for OTP
 

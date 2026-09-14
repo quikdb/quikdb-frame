@@ -1,5 +1,8 @@
 # quikdb-frame Specification
 
+Target specification. See [CAPABILITIES.md](CAPABILITIES.md) for current source evidence and
+completion gates; specification entries do not imply shipped, tested adapters or converters.
+
 Version: 0.2.0
 
 quikdb-frame is the operating system for QuikDB applications. It defines how apps are structured, built, deployed, scaled, and observed on QuikDB Compute. It covers project structure, CLI, deploy pipeline, auth, payments, observability, and developer workflow — designed to work with any AI coding assistant.

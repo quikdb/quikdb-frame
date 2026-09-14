@@ -1,5 +1,8 @@
 name: CI — Build, Test & Benchmark
 
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main, feat/frame-deployment-contracts]
@@ -12,7 +15,8 @@ concurrency:
 
 jobs:
   build-and-test:
-    runs-on: arc-runner-set
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     services:
       postgres:

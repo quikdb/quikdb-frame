@@ -27,6 +27,9 @@ node/operator runner. Frame releases are distributed through GitHub Releases, no
   failed-application identity, collision isolation and explicit configuration regressions.
 - .github/workflows/ci.yml: remote regression/vet plus scaffold/build/container checks.
 - .github/workflows/release.yml: remote tests/vet, platform builds and SHA256SUMS.
+- Frame is public: validation and release use isolated GitHub-hosted Linux runners, without
+  access to production EKS credentials. Existing ARC did not acquire its queued job. The API
+  remains private and its production deployment uses ARC; its GitHub repo is quikdb-device-apis.
 - internal/upgrade/: resolves one immutable release tag, checks the platform artifact against
   SHA256SUMS and retains the installed binary on missing/mismatched checksums or failed download.
 
