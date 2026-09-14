@@ -2,11 +2,11 @@
 
 Last updated: 2026-09-14
 
-Pending remote qualification: feat/frame-cli-management adds ID-based status/inspect/logs/
+Released v0.1.13 at 4045ff9: feat/frame-cli-management adds ID-based status/inspect/logs/
 history/lifecycle/config/resources/environment/domain management through dashboard APIs.
 See docs/CLI_MANAGEMENT.md. Safe public detail excludes env values/bundled logs; env set reads
 explicit file/stdin and redacts values, export creates a new private POSIX/Windows file.
-API ownership/scope/resource prerequisites deploy before releasing these commands. Human CLI
+API ownership/scope/resource and portal consent prerequisites deployed before release. Human CLI
 management is not delegated agent/database access. Full source/artifact/rollback fencing pending.
 
 Developer CLI and Go/Preact service scaffolding. The separate quikdb-cli-go binary is the
@@ -69,3 +69,12 @@ v0.1.9 published from 31651f6: remote contract/race/vet/platform builds and full
 Docker/runtime/load checks passed. Published Linux asset download/checksum/version/upgrade
 passed in an isolated credential-free remote job. Other platform binaries were built, but
 desktop credential integration belongs to the next native-login milestone.
+
+## v0.1.13 management qualification
+
+Full source/native/main gates 34839661303, 34839661301 and 34840141568 passed;
+signed release 34840605601 passed. Five binaries/checksums/provenance published.
+API e2a7145 ownership/scopes/resources deployed and portal 96d853c exact consent deployed.
+Older sessions retain deployment-only access; logout/new login explicitly approves env/domain
+access, including secret export. Actual published three-OS checks and fixture acceptance are
+recorded in the ops 08-CLI-MANAGEMENT-2026-09-14 report as they complete.
