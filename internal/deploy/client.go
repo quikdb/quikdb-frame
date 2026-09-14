@@ -25,19 +25,25 @@ func newAPIClient() *APIClient {
 }
 
 type Deployment struct {
-	ApplicationID    string            `json:"_id,omitempty"`
-	DeploymentID     string            `json:"deploymentId"`
-	ApplicationName  string            `json:"applicationName"`
-	Status           string            `json:"status"`
-	PublicURL        string            `json:"publicUrl"`
-	FailureReason    string            `json:"failureReason"`
-	RepositoryURL    string            `json:"repositoryUrl"`
-	RepositoryBranch string            `json:"repositoryBranch"`
-	Subdirectory     string            `json:"subdirectory"`
-	CommitHash       string            `json:"commitHash,omitempty"`
-	Configuration    *ManagementConfig `json:"configuration,omitempty"`
-	Subdomain        string            `json:"subdomain,omitempty"`
-	AutoDeploy       *struct {
+	ApplicationID    string `json:"_id,omitempty"`
+	DeploymentID     string `json:"deploymentId"`
+	ApplicationName  string `json:"applicationName"`
+	Status           string `json:"status"`
+	PublicURL        string `json:"publicUrl"`
+	FailureReason    string `json:"failureReason"`
+	RepositoryURL    string `json:"repositoryUrl"`
+	RepositoryBranch string `json:"repositoryBranch"`
+	Subdirectory     string `json:"subdirectory"`
+	CommitHash       string `json:"commitHash,omitempty"`
+	SourceSnapshot   *struct {
+		Version    int    `json:"version"`
+		Kind       string `json:"kind"`
+		SHA256     string `json:"sha256,omitempty"`
+		CommitHash string `json:"commitHash,omitempty"`
+	} `json:"sourceSnapshot,omitempty"`
+	Configuration *ManagementConfig `json:"configuration,omitempty"`
+	Subdomain     string            `json:"subdomain,omitempty"`
+	AutoDeploy    *struct {
 		Enabled bool   `json:"enabled"`
 		Branch  string `json:"branch"`
 	} `json:"autoDeploy,omitempty"`

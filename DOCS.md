@@ -97,3 +97,20 @@ CLI manifest validate --file quikdb.json --json runs offline and reports metadat
 Remote qualification: d287a76 full34846859517/native34846859537 passed, public schema39 cases and real macOS/Windows checks passed. API d08f609 shared pinned contracts plus nine suites/186 tests34846944145 passed; production rollout pending. Published-platform workflow can opt into actual offline manifest success/unsupported-version rejection on all three OSes after the tagged release.
 
 Final runtime de867b723832f5f681c5c02c9c6665450094cbd0 passed full/native34847304717/34847304730 and main34847715726. Tagged v0.1.15 signed release34847937129 passed. Actual published Linux/macOS/Windows34848153626 passed checksum/provenance/version/self-upgrade plus offline manifest success and sanitized unsupported-version rejection; manifest input enabled for all jobs. Linux x64 checksum7403e5e5508721bab9cd018e8648219265e0b24ddd5707746f23ff41197f886b. API prerequisite deployed generation248/two ready. Offline checks need no fixture session; fresh authenticated live remains separate.
+
+## Local archive uploads — feature branch, not released
+
+2026-09-15: feat/frame-archive-uploads adds deploy --source <directory> --config quikdb.json
+--name <application> --mode as-is. Offline --dry-run --json packages/validates without auth or
+network. Regular files/directories only; rooted reads reject escaping paths/links/special files,
+compressed64MiB/expanded1GiB/file256MiB/20000 entries. Common credential locations/.env files
+and dependency caches are excluded; dist/build output and executable bits retained. Exclusions
+are not a general secret scanner. Runtime values remain explicitly configured separately.
+
+Account preflight precedes uploads. Exact SHA256/size/opaque UUID receipt checked; current
+credential loaded and mutations never automatically retried. Create sends sourceId, never
+Git branch metadata. Repeat same archive observes/resumes the existing ID; mismatched archive/
+Git source fails without upload or a duplicate app. Changed-archive replacement is pending
+safely fenced updates, explicitly not silently reusing old code. Requires activated immutable
+API consumer/compatible application runners; no production activation or version tag yet.
+Remote CI/native/three-platform gates required before release.
