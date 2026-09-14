@@ -268,3 +268,46 @@ func TestNativeCredentialStoreRoundTrip(t *testing.T) {
 		t.Fatal("native credential remains after deletion")
 	}
 }
+
+func TestDeploymentPollingRefreshesExpiredCredentialsBeforeRequest(t *testing.T) {
+	credentialFixture(t)
+	t.Setenv("QUIKDB_TOKEN", "")
+	if err := SaveAuth(&AuthConfig{Token: "old-access", RefreshToken: "old-refresh", ExpiresAt: time.Now().Add(15 * time.Minute).Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+	var refreshes int
+	authServer(t, func(w http.ResponseWriter, r *http.Request) {
+		refreshes++
+		if r.URL.Path != "/api/auth/cli/refresh" {
+			t.Errorf("unexpected auth request %s", r.URL.Path)
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "data": tokenResponse{AccessToken: "new-access", RefreshToken: "new-refresh", WalletAddress: "fixture-wallet", ExpiresIn: 900, AccessExpiresAt: time.Now().Add(15 * time.Minute).Format(time.RFC3339)}})
+	})
+	requests := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		expected := "Bearer old-access"
+		status := "building"
+		if requests == 2 {
+			expected = "Bearer new-access"
+			status = "live"
+		}
+		if r.Header.Get("Authorization") != expected {
+			t.Errorf("poll %d: incorrect credential", requests)
+		}
+		if requests == 1 {
+			if err := SaveAuth(&AuthConfig{Token: "old-access", RefreshToken: "old-refresh", ExpiresAt: time.Now().Add(-time.Minute).Format(time.RFC3339)}); err != nil {
+				t.Error(err)
+			}
+		}
+		json.NewEncoder(w).Encode(map[string]interface{}{"success": true, "data": map[string]interface{}{"deployment": Deployment{DeploymentID: "fixture-app", Status: status}}})
+	}))
+	defer server.Close()
+	client := &APIClient{BaseURL: server.URL, HTTP: server.Client(), TokenProvider: RequireAuth}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	result, err := client.Wait(ctx, "initial-access", "fixture-app", time.Millisecond)
+	if err != nil || result.Status != "live" || refreshes != 1 || requests != 2 {
+		t.Fatalf("polling result %+v, error %v, refreshes %d requests %d", result, err, refreshes, requests)
+	}
+}

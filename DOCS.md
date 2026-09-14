@@ -11,7 +11,8 @@ node/operator runner. Frame releases are distributed through GitHub Releases, no
   List reads data.deployments/pagination; detail reads data.deployment. Legacy shapes remain
   readable. All pages are fetched, duplicate/incomplete results are errors.
 - Requests have a 30-second timeout; waiting is interruptible and bounded to 30 minutes.
-  A wait timeout does not cancel the platform deployment. Failed, partial and stopped states
+  A wait timeout does not cancel the platform deployment. Native credentials refresh before
+  each request when needed, so a 15-minute access token does not break a longer build. Failed, partial and stopped states
   produce failures. HTTP/auth/quota/JSON errors never become an empty successful account.
 - Deploy lists existing applications first, verifies repository/branch/service-directory
   ownership, and uses the same deployment ID to redeploy failed/stopped/sleeping applications.

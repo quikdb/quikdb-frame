@@ -14,12 +14,13 @@ import (
 
 // APIClient never retries mutations: a lost response may still mean the build was accepted.
 type APIClient struct {
-	BaseURL string
-	HTTP    *http.Client
+	BaseURL       string
+	HTTP          *http.Client
+	TokenProvider func() (string, error)
 }
 
 func newAPIClient() *APIClient {
-	return &APIClient{BaseURL: apiBase, HTTP: &http.Client{Timeout: 30 * time.Second}}
+	return &APIClient{BaseURL: apiBase, HTTP: &http.Client{Timeout: 30 * time.Second}, TokenProvider: RequireAuth}
 }
 
 type Deployment struct {
@@ -41,6 +42,13 @@ type apiEnvelope struct {
 }
 
 func (c *APIClient) request(ctx context.Context, token, method, path string, payload interface{}) (json.RawMessage, error) {
+	if c.TokenProvider != nil {
+		current, err := c.TokenProvider()
+		if err != nil {
+			return nil, fmt.Errorf("deployment authentication: %w", err)
+		}
+		token = current
+	}
 	var body io.Reader
 	if payload != nil {
 		encoded, err := json.Marshal(payload)
