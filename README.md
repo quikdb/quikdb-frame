@@ -69,12 +69,16 @@ required runtime variables in Compute explicitly. Private repositories require t
 connection used by the dashboard. Only committed and pushed source is deployed; this first path
 supports GitHub, not local uploads or arbitrary host/runtime requirements.
 
-For a monorepo service, supply `--subdirectory apps/api --config deployment.json`. The JSON object
-contains the existing Compute configuration fields (`appType`, `configSource`, original
-`buildCommand`/`startCommand`, and actual `port`; resource/env fields are explicit). Detection
-currently reads the repository root and will require this explicit service configuration.
-`--port` overrides both port fields. The dry-run prints source/runtime/port metadata without
-printing configuration commands or environment values. As-is `--json` emits a result object;
+From v0.1.14, a monorepo service uses `--subdirectory apps/api`. Shared detection reads
+that directory, preserves explicit `quikdb.json` commands/runtime/port/health settings, and
+fails clearly when the repository/ref/service is unavailable. Compute's repository wizard has
+the same optional Service directory choice. Custom Dockerfile/target and cross-directory
+build contexts remain under development.
+
+Use `--config deployment.json` to supply explicit existing Compute settings (`appType`,
+`configSource`, original `buildCommand`/`startCommand`, actual `port`, explicit resource/env
+fields). `--port` overrides both port fields. The dry-run prints source/runtime/port metadata
+without configuration commands or environment values. As-is `--json` emits a result object;
 errors go to stderr with a nonzero exit. Put flags before an optional native Frame service name.
 
 `--mode frame` works for native Frame projects. Existing non-Frame source is blocked before
