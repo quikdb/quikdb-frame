@@ -49,8 +49,9 @@ quikdb-frame deploy
 services using the same deployment ID. Once live, push to the connected branch for Git
 auto-deployment. From v0.1.11, the CLI also deploys existing GitHub applications as-is.
 Root-context native Frame projects require the pending Compute build-context contract described
-below; the CLI refuses to submit them through an older API/runner. Deployment-time conversion
-remains unavailable until preservation checks pass.
+below; the CLI refuses to submit them through an older API/runner. v0.1.16 adds offline local
+archive review and one bounded Express conversion pilot. Live archive submission remains blocked
+until Compute advertises the complete qualified capability.
 
 ## Deploy an existing application
 
@@ -83,7 +84,7 @@ fields). `--port` overrides both port fields. The dry-run prints source/runtime/
 without configuration commands or environment values. As-is `--json` emits a result object;
 errors go to stderr with a nonzero exit. Put flags before an optional native Frame service name.
 
-`--mode frame` keeps native Frame behavior for Frame projects. For local source, it must be paired
+From v0.1.16, `--mode frame` keeps native Frame behavior for Frame projects. For local source, it must be paired
 with an explicit `--from` converter. The only qualified pilot is the bounded Express subset below;
 unsupported or ambiguous code stops before login, upload or deployment and never falls back
 automatically. Repository conversion remains unavailable. Native services whose Docker context
@@ -270,7 +271,7 @@ We welcome contributions. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 Built by the [QuikDB](https://quikdb.com) team.
 
-### Local application uploads (upcoming release)
+### Local application packaging — v0.1.16
 
 Keep your existing language/framework and provide its original production settings:
 
@@ -279,8 +280,21 @@ quikdb-frame deploy --source ./my-app --config ./my-app/quikdb.json --name my-ap
 quikdb-frame deploy --source ./my-app --config ./my-app/quikdb.json --name my-app --mode as-is
 ```
 
-The dry run is offline. Uploads exclude common credential locations, local `.env` files and
+The dry run is offline and available in v0.1.16. Packaging excludes common credential locations, local `.env` files and
 dependency caches; compiled application output is retained. Review source for other secrets
 and configure runtime values separately. Archives are limited to 64 MiB compressed.
 Same-source deployment retains application identity; changing an existing application's
-archive is pending qualified update fencing. This feature is not included in v0.1.15 yet.
+archive is pending qualified update fencing. The non-dry-run command performs authenticated
+server capability preflight before any upload and currently refuses production submission while
+the API and runner flags are off. Use Git deployment for a live as-is application today.
+
+The bounded Express pilot is also available for offline qualification:
+
+```sh
+quikdb-frame deploy --source ./my-express-app --name my-express-frame --mode frame --from express --dry-run --json
+```
+
+It accepts only Express 4.21.2 on Node 20 with fixed literal responses and bounded static mounts.
+Unsupported or ambiguous code fails closed and never changes the user-selected as-is source.
+See [v0.1.16 release notes](docs/RELEASE_V0.1.16.md) and the
+[conversion support matrix](docs/EXPRESS_CONVERSION_PILOT.md).

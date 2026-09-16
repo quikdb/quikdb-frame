@@ -2,7 +2,7 @@ name: Express Conversion Pilot
 
 on:
   push:
-    branches: [feat/frame-express-static-converter]
+    branches: ['release/**', feat/frame-express-static-converter]
   pull_request:
     paths:
       - internal/convert/**
