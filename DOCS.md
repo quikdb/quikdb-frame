@@ -22,8 +22,9 @@ JSON, and carries the declared path, port and type. The deployed API/runner curr
 `subdirectory` as both service root, Docker context and Dockerfile directory. A root-context Frame
 service therefore fails before authentication or submission with a generic capability error;
 workers also fail closed because the current deployment contract requires an HTTP port. Legacy
-same-context HTTP services remain representable. This slice is unreleased and remote validation is
-pending.
+same-context HTTP services remain representable. The feature branch passed remote race tests, vet,
+schema/security/platform checks, generated-service builds and runtime/load/container validation;
+it remains unreleased pending review and merge.
 
 Released v0.1.13 at 4045ff9: feat/frame-cli-management adds ID-based status/inspect/logs/
 history/lifecycle/config/resources/environment/domain management through dashboard APIs.
