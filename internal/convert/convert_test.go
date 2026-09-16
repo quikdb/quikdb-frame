@@ -124,6 +124,49 @@ func TestExpressPilotRejectsAdditionalLogicAndUnqualifiedFrameworks(t *testing.T
 	}
 }
 
+func TestExpressPilotVersionDependencyAndRouteMatrixFailsClosed(t *testing.T) {
+	tests := map[string]struct {
+		pkg       string
+		statement string
+		expected  string
+	}{
+		"version range": {
+			pkg:      `{"name":"unsafe-fixture","engines":{"node":"20"},"scripts":{"start":"node server.js"},"dependencies":{"express":"^4.21.2"}}`,
+			expected: "exactly express 4.21.2",
+		},
+		"other Node major": {
+			pkg:      `{"name":"unsafe-fixture","engines":{"node":"22"},"scripts":{"start":"node server.js"},"dependencies":{"express":"4.21.2"}}`,
+			expected: "engines.node to be exactly 20",
+		},
+		"extra runtime dependency": {
+			pkg:      `{"name":"unsafe-fixture","engines":{"node":"20"},"scripts":{"start":"node server.js"},"dependencies":{"express":"4.21.2","axios":"1.0.0"}}`,
+			expected: "additional production dependency",
+		},
+		"ES module": {
+			pkg:      `{"name":"unsafe-fixture","type":"module","engines":{"node":"20"},"scripts":{"start":"node server.js"},"dependencies":{"express":"4.21.2"}}`,
+			expected: "only CommonJS",
+		},
+		"parameterized route": {
+			pkg:       `{"name":"unsafe-fixture","engines":{"node":"20"},"scripts":{"start":"node server.js"},"dependencies":{"express":"4.21.2"}}`,
+			statement: `app.get("/users/:id", (_req, res) => res.json({"fixed":true}));`,
+			expected:  "outside the fixed-path pilot",
+		},
+	}
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			statement := tc.statement
+			if statement == "" {
+				statement = `app.get("/", (_req, res) => res.send("ok"));`
+			}
+			writeFixturePackage(t, root, tc.pkg, statement)
+			if _, err := Run(Options{SourcePath: root, Framework: "express"}); err == nil || !strings.Contains(err.Error(), tc.expected) || !strings.Contains(err.Error(), "--mode as-is") {
+				t.Fatalf("matrix case did not fail closed: %v", err)
+			}
+		})
+	}
+}
+
 func TestConversionCommandRequiresExplicitApply(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "converted")
 	var stdout bytes.Buffer
@@ -148,6 +191,11 @@ func TestConversionCommandRequiresExplicitApply(t *testing.T) {
 func writeFixture(t *testing.T, root, statement string) {
 	t.Helper()
 	pkg := `{"name":"unsafe-fixture","engines":{"node":"20"},"scripts":{"start":"node server.js"},"dependencies":{"express":"4.21.2"}}`
+	writeFixturePackage(t, root, pkg, statement)
+}
+
+func writeFixturePackage(t *testing.T, root, pkg, statement string) {
+	t.Helper()
 	entry := "const express = require(\"express\");\nconst app = express();\n" + statement + "\nconst port = process.env.PORT || 8080;\napp.listen(port);\n"
 	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(pkg), 0644); err != nil {
 		t.Fatal(err)
