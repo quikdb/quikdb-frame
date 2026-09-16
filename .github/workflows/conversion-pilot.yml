@@ -90,6 +90,7 @@ jobs:
           converted_bytes=$(docker image inspect quikdb-frame-converted-pilot --format '{{.Size}}')
           test "$converted_bytes" -lt "$original_bytes"
           test "$converted_bytes" -lt 20971520
+          printf 'Original fixture image: %s bytes\nConverted scratch image: %s bytes\n' "$original_bytes" "$converted_bytes"
           printf '\n### Container size gate\n\n- Original fixture: %s bytes\n- Converted scratch image: %s bytes\n' "$original_bytes" "$converted_bytes" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Clean temporary processes, images and files
