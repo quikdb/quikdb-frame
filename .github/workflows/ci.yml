@@ -263,53 +263,23 @@ jobs:
           go build -o /dev/null ./services/web-dashboard
           echo "- **add web dashboard**: files OK" >> $GITHUB_STEP_SUMMARY
 
-      # ── 6. Express Converter ──
-      - name: Create test Express app
-        run: |
-          mkdir -p /tmp/express-test/routes
-          cat > /tmp/express-test/app.js << 'JSEOF'
-          const express = require('express');
-          const app = express();
-          app.use(express.json());
-          app.get('/health', (req, res) => res.json({ status: 'ok' }));
-          app.get('/api/users', (req, res) => res.json([]));
-          app.post('/api/users', (req, res) => res.json({ created: true }));
-          app.get('/api/users/:id', (req, res) => res.json({ id: req.params.id }));
-          app.put('/api/users/:id', (req, res) => res.json({ updated: true }));
-          app.delete('/api/users/:id', (req, res) => res.json({ deleted: true }));
-          app.get('/api/posts', (req, res) => res.json([]));
-          app.post('/api/posts', (req, res) => res.json({ created: true }));
-          app.listen(3000);
-          JSEOF
-
-          cat > /tmp/express-test/package.json << 'PKGEOF'
-          {"name":"express-test","dependencies":{"express":"^4.18.0","mongoose":"^7.0.0"}}
-          PKGEOF
-
-          cat > /tmp/express-test/.env.example << 'ENVEOF'
-          DATABASE_URL=mongodb://localhost:27017/test
-          JWT_SECRET=secret
-          PORT=3000
-          ENVEOF
-
+      # ── 6. Bounded Express Converter ──
       - name: Run Express converter
         run: |
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## Express Converter" >> $GITHUB_STEP_SUMMARY
-          ./quikdb-frame convert /tmp/express-test --from express
-
-          # Verify output
+          echo "## Bounded Express Converter" >> $GITHUB_STEP_SUMMARY
+          fixture="$GITHUB_WORKSPACE/internal/convert/testdata/express-static"
+          ./quikdb-frame convert "$fixture" --from express --output /tmp/express-test-quikdb --json > /tmp/express-plan.json
+          test ! -e /tmp/express-test-quikdb
+          ./quikdb-frame convert "$fixture" --from express --output /tmp/express-test-quikdb --apply
           test -d /tmp/express-test-quikdb
-          grep -q "type: mongo" /tmp/express-test-quikdb/quikdb.yaml
-          echo "- **DB detection**: mongo (correct)" >> $GITHUB_STEP_SUMMARY
-
-          ROUTE_COUNT=$(grep -c "HandleFunc" /tmp/express-test-quikdb/services/api/routes.go || echo "0")
-          echo "- **Routes detected**: $ROUTE_COUNT" >> $GITHUB_STEP_SUMMARY
-
-          # Verify it compiles
+          grep -q "port: 3187" /tmp/express-test-quikdb/quikdb.yaml
+          ! grep -R "TODO: implement" /tmp/express-test-quikdb
           cd /tmp/express-test-quikdb
           go build -o /dev/null ./services/api
-          echo "- **Output compiles**: YES" >> $GITHUB_STEP_SUMMARY
+          echo "- **Plan-only wrote output**: NO" >> $GITHUB_STEP_SUMMARY
+          echo "- **Explicit applied output compiles**: YES" >> $GITHUB_STEP_SUMMARY
+          rm -rf /tmp/express-test-quikdb /tmp/express-plan.json
 
       # ── 7. Docker Image (linux/amd64) ──
       - name: Build Docker image
