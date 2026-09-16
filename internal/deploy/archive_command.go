@@ -54,9 +54,12 @@ func commandArchive(o DeployOptions) error {
 	}
 	capability, err := client.request(ctx, token, "GET", "/source-capabilities", nil)
 	var available struct {
-		ArchiveDeployment bool `json:"archiveDeployment"`
+		ArchiveDeployment    bool  `json:"archiveDeployment"`
+		ArchiveUploadVersion int   `json:"archiveUploadVersion"`
+		MaxArchiveBytes      int64 `json:"maxArchiveBytes"`
+		IdempotentUploads    bool  `json:"idempotentUploads"`
 	}
-	if err != nil || json.Unmarshal(capability, &available) != nil || !available.ArchiveDeployment {
+	if err != nil || json.Unmarshal(capability, &available) != nil || !available.ArchiveDeployment || available.ArchiveUploadVersion != 1 || available.MaxArchiveBytes != archiveUploadLimit || !available.IdempotentUploads {
 		return fmt.Errorf("archive deployment is not active yet; use Git deployment or --dry-run to review your local archive")
 	}
 	byName := map[string]Deployment{}
@@ -80,6 +83,9 @@ func commandArchive(o DeployOptions) error {
 	}
 	result, err := deployApplication(ctx, client, token, request, byName, o.JSON)
 	if err != nil {
+		if request.SourceID != "" {
+			_ = client.releaseSource(ctx, token, request.SourceID)
+		}
 		return err
 	}
 	if o.JSON {

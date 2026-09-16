@@ -112,7 +112,7 @@ func TestLocalArchiveRejectsLinksAndCancellation(t *testing.T) {
 		t.Fatal("ignored cancellation")
 	}
 }
-func TestArchiveUploadChecksReceiptAndRotatesCredentialWithoutRetries(t *testing.T) {
+func TestArchiveUploadChecksReceiptAndRetriesOnlyIdempotentTransientFailures(t *testing.T) {
 	root, _ := archiveFixture(t)
 	archive, err := packageSource(context.Background(), root)
 	if err != nil {
@@ -124,7 +124,7 @@ func TestArchiveUploadChecksReceiptAndRotatesCredentialWithoutRetries(t *testing
 			calls := 0
 			c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 				calls++
-				if r.Header.Get("Authorization") != "Bearer fixture-token" || r.Header.Get("Content-Type") != "application/gzip" {
+				if r.Header.Get("Authorization") != "Bearer fixture-token" || r.Header.Get("Content-Type") != "application/gzip" || r.Header.Get("X-QuikDB-Source-SHA256") != archive.SHA256 {
 					t.Error("wrong credential/type")
 				}
 				bytes, _ := io.ReadAll(r.Body)
@@ -157,8 +157,12 @@ func TestArchiveUploadChecksReceiptAndRotatesCredentialWithoutRetries(t *testing
 			if (err != nil) != (failure != "") || (failure == "" && id != fixtureSourceID) {
 				t.Fatalf("receipt acceptance: %q %v", id, err)
 			}
-			if calls != 1 {
-				t.Fatal("retried upload mutation")
+			expectedCalls := 1
+			if failure == "status" {
+				expectedCalls = 2
+			}
+			if calls != expectedCalls {
+				t.Fatalf("unexpected idempotent upload attempts: %d", calls)
 			}
 		})
 	}
@@ -201,7 +205,7 @@ func TestArchiveCommandUploadsOnlyAfterAccountPreflightThenCreatesByHandle(t *te
 		case "/api/v1/deployment/list":
 			fmt.Fprint(w, `{"success":true,"data":[]}`)
 		case "/api/v1/deployment/source-capabilities":
-			fmt.Fprint(w, `{"success":true,"data":{"archiveDeployment":true}}`)
+			fmt.Fprint(w, `{"success":true,"data":{"archiveDeployment":true,"archiveUploadVersion":1,"maxArchiveBytes":67108864,"idempotentUploads":true}}`)
 		case "/api/v1/deployment/sources":
 			bytes, _ := io.ReadAll(r.Body)
 			hash := sha256.Sum256(bytes)
@@ -233,6 +237,46 @@ func TestArchiveCommandUploadsOnlyAfterAccountPreflightThenCreatesByHandle(t *te
 	}
 	if strings.Join(calls, ",") != "/api/v1/deployment/list,/api/v1/deployment/source-capabilities,/api/v1/deployment/sources,/api/v1/deployment/create,/api/v1/deployment/fixture" {
 		t.Fatalf("unexpected submission order %v", calls)
+	}
+}
+func TestArchiveCommandReleasesUnusedUploadAfterRejectedCreation(t *testing.T) {
+	credentialFixture(t)
+	t.Setenv("QUIKDB_TOKEN", "")
+	if err := SaveAuth(&AuthConfig{Token: "fixture-token", ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+	root, config := archiveFixture(t)
+	released := false
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/api/v1/deployment/list":
+			fmt.Fprint(w, `{"success":true,"data":[]}`)
+		case r.URL.Path == "/api/v1/deployment/source-capabilities":
+			fmt.Fprint(w, `{"success":true,"data":{"archiveDeployment":true,"archiveUploadVersion":1,"maxArchiveBytes":67108864,"idempotentUploads":true}}`)
+		case r.URL.Path == "/api/v1/deployment/sources" && r.Method == http.MethodPost:
+			bytes, _ := io.ReadAll(r.Body)
+			hash := sha256.Sum256(bytes)
+			w.WriteHeader(http.StatusCreated)
+			fmt.Fprintf(w, `{"success":true,"data":{"sourceId":"%s","sha256":"%s","size":%d}}`, fixtureSourceID, hex.EncodeToString(hash[:]), len(bytes))
+		case r.URL.Path == "/api/v1/deployment/create":
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"success":false,"error":"invalid_configuration"}`)
+		case r.URL.Path == "/api/v1/deployment/sources/"+fixtureSourceID && r.Method == http.MethodDelete:
+			released = true
+			fmt.Fprint(w, `{"success":true,"data":{"released":true,"retained":false}}`)
+		default:
+			t.Errorf("unexpected request %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	oldFactory := deployClientFactory
+	defer func() { deployClientFactory = oldFactory }()
+	deployClientFactory = func() *APIClient { return c }
+	if err := Command([]string{"--source", root, "--config", config, "--name", "fixture", "--json"}); err == nil {
+		t.Fatal("rejected deployment reported success")
+	}
+	if !released {
+		t.Fatal("unused source handle was not released")
 	}
 }
 func TestArchiveCannotSilentlyReuseDifferentApplicationSource(t *testing.T) {
@@ -303,7 +347,7 @@ func TestArchiveRepeatPreservesIdentityWithoutUploadingAgain(t *testing.T) {
 		case "/api/v1/deployment/list":
 			fmt.Fprint(w, `{"success":true,"data":[{"deploymentId":"same-fixture-id","applicationName":"fixture","status":"live"}]}`)
 		case "/api/v1/deployment/source-capabilities":
-			fmt.Fprint(w, `{"success":true,"data":{"archiveDeployment":true}}`)
+			fmt.Fprint(w, `{"success":true,"data":{"archiveDeployment":true,"archiveUploadVersion":1,"maxArchiveBytes":67108864,"idempotentUploads":true}}`)
 		case "/api/v1/deployment/same-fixture-id":
 			fmt.Fprintf(w, `{"success":true,"data":{"deployment":{"deploymentId":"same-fixture-id","status":"live","sourceSnapshot":{"version":1,"kind":"archive","sha256":"%s"}}}}`, digest)
 		default:

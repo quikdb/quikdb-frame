@@ -2,6 +2,11 @@
 
 Last updated: 2026-09-16
 
+The local archive client now requires the complete server-advertised v1 capability before any
+upload. It sends the packaged SHA-256 identity, retries one transient upload failure against the
+idempotent server contract, verifies the returned handle/digest/size, and releases an unused handle
+when deployment creation is rejected. Production activation and a CLI release remain separate gates.
+
 ## Native shared module and build context — stacked feature branch
 
 `internal/project` is the typed source of truth for native `quikdb.yaml`. In addition to validated
