@@ -16,6 +16,11 @@ on:
         required: false
         default: false
         type: boolean
+      universal_deploy:
+        description: Verify published local packaging and bounded Express conversion dry-runs
+        required: false
+        default: false
+        type: boolean
 permissions:
   contents: read
 jobs:
@@ -79,3 +84,29 @@ jobs:
           fi
           node -e 'const s=require("fs").readFileSync("manifest-rejected.txt","utf8");if(!s.includes("invalid deployment manifest")||s.includes("original.js"))process.exit(1)'
           printf '%s published offline manifest validation and unsupported-version rejection passed.\n' "$RUNNER_OS" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify actual published universal deployment dry-runs
+        if: ${{ inputs.universal_deploy }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-smoke
+          case "$RUNNER_OS/$RUNNER_ARCH" in
+            Linux/X64) asset=quikdb-frame-linux-amd64 ;;
+            macOS/ARM64) asset=quikdb-frame-darwin-arm64 ;;
+            macOS/X64) asset=quikdb-frame-darwin-amd64 ;;
+            Windows/X64) asset=quikdb-frame-windows-amd64.exe ;;
+            *) exit 1 ;;
+          esac
+          mkdir -p express-fixture/public
+          base="https://raw.githubusercontent.com/quikdb/quikdb-frame/$FRAME_TEST_TAG"
+          curl --fail --silent --show-error --proto '=https' --max-time 30 "$base/internal/convert/testdata/express-static/server.js" -o express-fixture/server.js
+          curl --fail --silent --show-error --proto '=https' --max-time 30 "$base/internal/convert/testdata/express-static/package.json" -o express-fixture/package.json
+          curl --fail --silent --show-error --proto '=https' --max-time 30 "$base/internal/convert/testdata/express-static/public/banner.txt" -o express-fixture/public/banner.txt
+          curl --fail --silent --show-error --proto '=https' --max-time 30 "$base/internal/convert/testdata/express-static/public/app.js" -o express-fixture/public/app.js
+          curl --fail --silent --show-error --proto '=https' --max-time 30 "$base/contracts/deployment-manifest-v1.example.json" -o manifest-example.json
+          ./"$asset" deploy --source express-fixture --config manifest-example.json --name published-as-is --mode as-is --dry-run --json > as-is-plan.json
+          ./"$asset" deploy --source express-fixture --name published-frame --mode frame --from express --dry-run --json > frame-plan.json
+          node -e 'const p=require("./as-is-plan.json");if(p.mode!=="as-is"||p.source!=="local archive"||p.applicationName!=="published-as-is"||!p.sha256||p.entries!==5)process.exit(1)'
+          node -e 'const p=require("./frame-plan.json");if(p.mode!=="frame"||p.qualification!=="eligible"||p.converter!=="express-static-v1"||p.applicationName!=="published-frame"||p.rollback?.mode!=="as-is")process.exit(1)'
+          printf '%s published as-is packaging and Express conversion dry-runs passed without authentication or upload.\n' "$RUNNER_OS" >> "$GITHUB_STEP_SUMMARY"

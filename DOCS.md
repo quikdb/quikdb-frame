@@ -2,10 +2,11 @@
 
 Last updated: 2026-09-16
 
-The local archive client now requires the complete server-advertised v1 capability before any
+v0.1.16 publishes the local archive review and bounded Express conversion pilot. The archive
+client requires the complete server-advertised v1 capability before any
 upload. It sends the packaged SHA-256 identity, retries one transient upload failure against the
 idempotent server contract, verifies the returned handle/digest/size, and releases an unused handle
-when deployment creation is rejected. Production activation and a CLI release remain separate gates.
+when deployment creation is rejected. Production activation remains a separate gate and is off.
 
 ## Native shared module and build context — stacked feature branch
 
@@ -127,7 +128,7 @@ Remote qualification: d287a76 full34846859517/native34846859537 passed, public s
 
 Final runtime de867b723832f5f681c5c02c9c6665450094cbd0 passed full/native34847304717/34847304730 and main34847715726. Tagged v0.1.15 signed release34847937129 passed. Actual published Linux/macOS/Windows34848153626 passed checksum/provenance/version/self-upgrade plus offline manifest success and sanitized unsupported-version rejection; manifest input enabled for all jobs. Linux x64 checksum7403e5e5508721bab9cd018e8648219265e0b24ddd5707746f23ff41197f886b. API prerequisite deployed generation248/two ready. Offline checks need no fixture session; fresh authenticated live remains separate.
 
-## Express static-response conversion pilot — draft
+## Express static-response conversion pilot — v0.1.16
 
 `express-static-v1` replaces the old route-stub path with one bounded converter. Planning is
 side-effect-free by default and `--apply` is explicit. The accepted matrix is exact Express
@@ -144,10 +145,10 @@ private temporary converted candidate and removes it afterward. Unsupported inpu
 or authenticates. Hosted qualification compares original and converted status,
 content type and body bytes for the fixture oracles, asset bytes, deterministic output, rejection
 fixtures, generated builds and container image size. Production upload still requires the complete
-server-advertised archive capability; this branch does not activate it or add dashboard conversion
+server-advertised archive capability; this release does not activate it or add dashboard conversion
 execution. See docs/EXPRESS_CONVERSION_PILOT.md.
 
-## Local archive uploads — feature branch, not released
+## Local archive packaging and gated upload — v0.1.16
 
 2026-09-15: feat/frame-archive-uploads adds deploy --source <directory> --config quikdb.json
 --name <application> --mode as-is. Offline --dry-run --json packages/validates without auth or
@@ -160,6 +161,8 @@ Account preflight precedes uploads. Exact SHA256/size/opaque UUID receipt checke
 credential loaded and mutations never automatically retried. Create sends sourceId, never
 Git branch metadata. Repeat same archive observes/resumes the existing ID; mismatched archive/
 Git source fails without upload or a duplicate app. Changed-archive replacement is pending
-safely fenced updates, explicitly not silently reusing old code. Requires activated immutable
-API consumer/compatible application runners; no production activation or version tag yet.
-Remote CI/native/three-platform gates required before release.
+safely fenced updates, explicitly not silently reusing old code. Live upload requires activated
+immutable API authority and compatible application runners. Those flags remain off. The released
+binary therefore supports offline package review while a non-dry-run request fails at server
+capability preflight before upload. Signed Linux/macOS/Windows assets and their actual offline
+behaviors are release gates.

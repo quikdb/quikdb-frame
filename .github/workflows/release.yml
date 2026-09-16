@@ -27,6 +27,15 @@ jobs:
           go test -race ./...
           go vet ./...
 
+      - name: Verify offline universal deployment choices
+        run: |
+          go build -ldflags="-s -w -X main.version=${GITHUB_REF_NAME#v}" -o /tmp/quikdb-frame ./cmd/quikdb-frame
+          fixture="$GITHUB_WORKSPACE/internal/convert/testdata/express-static"
+          /tmp/quikdb-frame deploy --source "$fixture" --config contracts/deployment-manifest-v1.example.json --name published-as-is --mode as-is --dry-run --json > /tmp/as-is-plan.json
+          /tmp/quikdb-frame deploy --source "$fixture" --name published-frame --mode frame --from express --dry-run --json > /tmp/frame-plan.json
+          node -e 'const p=require("/tmp/as-is-plan.json");if(p.mode!=="as-is"||p.source!=="local archive"||p.applicationName!=="published-as-is"||!p.sha256||p.entries<1)process.exit(1)'
+          node -e 'const p=require("/tmp/frame-plan.json");if(p.mode!=="frame"||p.qualification!=="eligible"||p.converter!=="express-static-v1"||p.applicationName!=="published-frame"||p.rollback?.mode!=="as-is")process.exit(1)'
+
       - name: Build binaries
         run: |
           sh scripts/install_test.sh
@@ -91,3 +100,8 @@ jobs:
             Connect through Compute with `quikdb-frame login`, or `quikdb-frame login --device`
             for a remote terminal. Approve only a login you started. See README for credential
             storage, session expiry and current deployment/conversion support.
+
+            v0.1.16 makes local as-is packaging dry-runs and the bounded Express-to-Frame
+            qualification/dry-run available in published binaries. Actual local archive upload
+            remains unavailable until Compute advertises the complete archive capability; this
+            release does not enable any API or runner flag.
