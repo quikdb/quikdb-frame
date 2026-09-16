@@ -101,7 +101,7 @@ jobs:
             for a remote terminal. Approve only a login you started. See README for credential
             storage, session expiry and current deployment/conversion support.
 
-            v0.1.16 makes local as-is packaging dry-runs and the bounded Express-to-Frame
+            This release makes local as-is packaging dry-runs and the bounded Express-to-Frame
             qualification/dry-run available in published binaries. Actual local archive upload
             remains unavailable until Compute advertises the complete archive capability; this
             release does not enable any API or runner flag.
