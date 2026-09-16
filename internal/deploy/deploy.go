@@ -2,24 +2,28 @@ package deploy
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
 	"os/signal"
+	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+
+	"github.com/quikdb/quikdb-frame/internal/project"
 )
 
 type ServiceConfig struct {
-	Name         string `json:"name"`
-	Type         string `json:"type"`
-	BuildCommand string `json:"buildCommand"`
-	StartCommand string `json:"startCommand"`
-	DirName      string `json:"-"` // actual directory name (always used for subdirectory path)
+	Name       string
+	ManifestID string
+	Type       string
+	Path       string
+	Port       int
+	Build      project.Build
 }
 
 type DeployRequest struct {
@@ -37,10 +41,6 @@ func Run(svcName string) error {
 	if _, err := os.Stat("quikdb.yaml"); err != nil {
 		return fmt.Errorf("read quikdb.yaml: %w", err)
 	}
-	token, err := RequireAuth()
-	if err != nil {
-		return err
-	}
 	repoURL, branch, err := getGitInfo()
 	if err != nil {
 		return fmt.Errorf("could not detect git repository: %w", err)
@@ -49,6 +49,15 @@ func Run(svcName string) error {
 		fmt.Println("Warning: Only committed and pushed code will be deployed.")
 	}
 	services, err := findServices(svcName)
+	if err != nil {
+		return err
+	}
+	for _, service := range services {
+		if err := validateCurrentNativeDeployContract(service); err != nil {
+			return err
+		}
+	}
+	token, err := RequireAuth()
 	if err != nil {
 		return err
 	}
@@ -84,13 +93,30 @@ func Run(svcName string) error {
 }
 
 func deployService(ctx context.Context, client *APIClient, token, repoURL, branch string, svc ServiceConfig, existing map[string]Deployment) (*Deployment, error) {
+	if err := validateCurrentNativeDeployContract(svc); err != nil {
+		return nil, err
+	}
 	config := map[string]interface{}{
-		"appType": mapServiceType(svc.Type), "buildCommand": svc.BuildCommand,
-		"startCommand": svc.StartCommand, "port": 3000, "configSource": "dockerfile",
+		"appType": mapServiceType(svc.Type), "port": svc.Port,
+		"internalPort": svc.Port, "configSource": "dockerfile",
 	}
 	return deployApplication(ctx, client, token, DeployRequest{RepositoryURL: repoURL,
-		RepositoryBranch: branch, ApplicationName: svc.Name, Subdirectory: "services/" + svc.DirName,
+		RepositoryBranch: branch, ApplicationName: svc.Name, Subdirectory: svc.Build.Context,
 		Configuration: config}, existing, false)
+}
+
+func validateCurrentNativeDeployContract(svc ServiceConfig) error {
+	if svc.Type == "worker" {
+		return fmt.Errorf("service %s is a worker; the current Compute deployment contract requires an HTTP port, so no deployment was submitted", svc.ManifestID)
+	}
+	if svc.Port < 1 || svc.Port > 65535 {
+		return fmt.Errorf("service %s has no deployable HTTP port", svc.ManifestID)
+	}
+	expectedDockerfile := path.Join(svc.Build.Context, "Dockerfile")
+	if svc.Build.Context != svc.Path || svc.Build.Dockerfile != expectedDockerfile || svc.Build.Target != "" {
+		return fmt.Errorf("service %s requires build context %q, Dockerfile %q and target %q; the current Compute deployment contract cannot represent these separately, so no deployment was submitted", svc.ManifestID, svc.Build.Context, svc.Build.Dockerfile, svc.Build.Target)
+	}
+	return nil
 }
 
 func deployApplication(ctx context.Context, client *APIClient, token string, request DeployRequest, existing map[string]Deployment, quiet bool) (*Deployment, error) {
@@ -161,43 +187,65 @@ func Status() error {
 }
 
 func findServices(svcName string) ([]ServiceConfig, error) {
-	entries, err := os.ReadDir("services")
+	manifest, err := project.Load("quikdb.yaml")
 	if err != nil {
-		return nil, fmt.Errorf("no services/ directory found")
+		return nil, err
 	}
-
-	var services []ServiceConfig
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+	names := make([]string, 0, len(manifest.Services))
+	requiresRootModule := false
+	for name := range manifest.Services {
+		names = append(names, name)
+		if manifest.Services[name].Build.Context == "." {
+			requiresRootModule = true
 		}
-		name := entry.Name()
+	}
+	if requiresRootModule {
+		if err := project.ValidateGoModule("go.mod", manifest.GoModule); err != nil {
+			return nil, err
+		}
+	}
+	sort.Strings(names)
+	var services []ServiceConfig
+	for _, name := range names {
 		if svcName != "" && name != svcName {
 			continue
 		}
-
-		// Read quikdb.json
-		configPath := filepath.Join("services", name, "quikdb.json")
-		data, err := os.ReadFile(configPath)
+		declared := manifest.Services[name]
+		info, err := os.Lstat(filepath.FromSlash(declared.Path))
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("service %s path %s is unavailable: %w", name, declared.Path, err)
 		}
-		var svc ServiceConfig
-		if err := json.Unmarshal(data, &svc); err != nil {
-			return nil, fmt.Errorf("invalid %s: %w", configPath, err)
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("service %s path must be a real directory", name)
 		}
-		if svc.Name == "" {
-			svc.Name = name
+		buildContext := filepath.FromSlash(declared.Build.Context)
+		info, err = os.Lstat(buildContext)
+		if err != nil {
+			return nil, fmt.Errorf("service %s build context %s is unavailable: %w", name, declared.Build.Context, err)
 		}
-		svc.DirName = name // always the actual directory name
-		services = append(services, svc)
+		if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return nil, fmt.Errorf("service %s build context must be a real directory", name)
+		}
+		dockerfile := filepath.FromSlash(declared.Build.Dockerfile)
+		info, err = os.Lstat(dockerfile)
+		if err != nil {
+			return nil, fmt.Errorf("service %s Dockerfile %s is unavailable: %w", name, declared.Build.Dockerfile, err)
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("service %s Dockerfile must be a regular file", name)
+		}
+		deploymentName := manifest.Name + "-" + name
+		if len(deploymentName) > 63 {
+			return nil, fmt.Errorf("service %s deployment name exceeds 63 characters; shorten the project or service name", name)
+		}
+		services = append(services, ServiceConfig{Name: deploymentName, ManifestID: name, Type: declared.Type, Path: declared.Path, Port: declared.Port, Build: declared.Build})
 	}
 
 	if len(services) == 0 {
 		if svcName != "" {
-			return nil, fmt.Errorf("service %s not found or has no quikdb.json", svcName)
+			return nil, fmt.Errorf("service %s is not declared in quikdb.yaml", svcName)
 		}
-		return nil, fmt.Errorf("no services with quikdb.json found")
+		return nil, fmt.Errorf("quikdb.yaml declares no services")
 	}
 
 	return services, nil

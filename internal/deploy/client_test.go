@@ -11,7 +11,13 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/quikdb/quikdb-frame/internal/project"
 )
+
+func compatibleNativeService() ServiceConfig {
+	return ServiceConfig{Name: "api", ManifestID: "api", Type: "api", Path: "services/api", Port: 8080, Build: project.Build{Context: "services/api", Dockerfile: "services/api/Dockerfile"}}
+}
 
 func testClient(t *testing.T, handler http.HandlerFunc) *APIClient {
 	t.Helper()
@@ -151,7 +157,7 @@ func TestDeployFailedApplicationUsesSameIDWithoutCreate(t *testing.T) {
 		}
 		fmt.Fprintf(w, `{"success":true,"data":{"deployment":{"deploymentId":"id","status":"%s","repositoryUrl":"https://github.com/team/app","repositoryBranch":"main","subdirectory":"services/api"}}}`, status)
 	})
-	d, err := deployService(context.Background(), c, "fixture-token", "git@github.com:team/app.git", "main", ServiceConfig{Name: "api", DirName: "api", Type: "api"}, map[string]Deployment{"api": {DeploymentID: "id"}})
+	d, err := deployService(context.Background(), c, "fixture-token", "git@github.com:team/app.git", "main", compatibleNativeService(), map[string]Deployment{"api": {DeploymentID: "id"}})
 	if err != nil || d.DeploymentID != "id" {
 		t.Fatalf("got %+v, %v", d, err)
 	}
@@ -167,7 +173,7 @@ func TestDeployNameCollisionCannotMutateOtherApplication(t *testing.T) {
 		}
 		fmt.Fprint(w, `{"success":true,"data":{"deployment":{"deploymentId":"id","status":"failed","repositoryUrl":"https://github.com/other/app","repositoryBranch":"main"}}}`)
 	})
-	_, err := deployService(context.Background(), c, "fixture-token", "https://github.com/team/app", "main", ServiceConfig{Name: "api", DirName: "api"}, map[string]Deployment{"api": {DeploymentID: "id"}})
+	_, err := deployService(context.Background(), c, "fixture-token", "https://github.com/team/app", "main", compatibleNativeService(), map[string]Deployment{"api": {DeploymentID: "id"}})
 	if err == nil {
 		t.Fatal("name collision accepted")
 	}
@@ -204,7 +210,7 @@ func TestDeployDoesNotUploadEnvironmentFiles(t *testing.T) {
 			fmt.Fprint(w, `{"success":true,"data":{"deployment":{"deploymentId":"id","status":"live"}}}`)
 		}
 	})
-	_, err = deployService(context.Background(), c, "fixture-token", "https://github.com/team/app", "main", ServiceConfig{Name: "api", DirName: "api", Type: "api"}, nil)
+	_, err = deployService(context.Background(), c, "fixture-token", "https://github.com/team/app", "main", compatibleNativeService(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,5 +219,8 @@ func TestDeployDoesNotUploadEnvironmentFiles(t *testing.T) {
 	}
 	if request.Subdirectory != "services/api" {
 		t.Fatalf("subdirectory %s", request.Subdirectory)
+	}
+	if request.Configuration["port"] != float64(8080) || request.Configuration["internalPort"] != float64(8080) || request.Configuration["appType"] != "go" {
+		t.Fatalf("manifest settings were not submitted: %+v", request.Configuration)
 	}
 }

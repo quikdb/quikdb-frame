@@ -2,23 +2,29 @@
 
 Last updated: 2026-09-16
 
-## Native project manifest v1 — feature branch
+## Native shared module and build context — stacked feature branch
 
-`internal/project` is the typed source of truth for native `quikdb.yaml`. It strictly parses one
-bounded regular YAML file, accepts the previous unversioned generated shape as v1, rejects unknown
-fields and validates project/service names, confined paths, service types, unique ports/routes,
-environment names, dependency references/cycles and exact routing parity. The public JSON Schema
-and contract cases live under `contracts/frame-project-manifest-v1.*`.
+`internal/project` is the typed source of truth for native `quikdb.yaml`. In addition to validated
+service paths, ports and types, v1 now declares one `goModule` and each service's repository-relative
+build context, Dockerfile and optional target. Dockerfiles must stay inside their declared context.
+The loader upgrades the earlier v1/unversioned shape in memory by treating each old service path as
+its context and its local Dockerfile as the build file.
 
-`init` and the Express/Flask migration scaffold serialize through this contract, removing the
-malformed same-line routing maps. `add` validates its input, writes generated services into the
-manifest and rolls back the new service directory if the manifest cannot be saved. `dev` now uses
-declared service paths, types and ports and returns when every child exits instead of waiting
-forever. Generated API/WS/worker/web `quikdb.json` files are parsed in remote regression tests.
+New projects have one root `go.mod`; nested service modules are no longer generated. API, web and
+added Go services import the shared logging package. API scaffolds also use shared auth middleware
+and the database status contract, while workers use logging and database status. Dockerfiles build
+from the repository root, copy only the selected service plus shared Go source into the builder,
+and copy only the executable/assets into the final image. Generated application logs use
+application fields and do not name the hosting provider or runner.
 
-This slice does not wire native deployment/edge routing, shared Go modules, hot reload, production
-API/browser wiring, immutable artifacts or conversion semantics. It is unreleased until its branch
-passes remote CI and is reviewed and merged.
+Native deployment now discovers services from `quikdb.yaml`, not directory names or per-service
+JSON, and carries the declared path, port and type. The deployed API/runner currently use one
+`subdirectory` as both service root, Docker context and Dockerfile directory. A root-context Frame
+service therefore fails before authentication or submission with a generic capability error;
+workers also fail closed because the current deployment contract requires an HTTP port. Legacy
+same-context HTTP services remain representable. The feature branch passed remote race tests, vet,
+schema/security/platform checks, generated-service builds and runtime/load/container validation;
+it remains unreleased pending review and merge.
 
 Released v0.1.13 at 4045ff9: feat/frame-cli-management adds ID-based status/inspect/logs/
 history/lifecycle/config/resources/environment/domain management through dashboard APIs.

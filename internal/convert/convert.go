@@ -267,6 +267,12 @@ func generateFromScan(outPath string, scan scanResult) error {
 	if err := project.Save(filepath.Join(outPath, "quikdb.yaml"), manifest); err != nil {
 		return err
 	}
+	if err := os.WriteFile(filepath.Join(outPath, "go.mod"), []byte(fmt.Sprintf("module %s\n\ngo 1.24\n", name)), 0644); err != nil {
+		return err
+	}
+	if err := os.WriteFile(filepath.Join(outPath, ".dockerignore"), []byte(".git\n.env\n.env.*\n**/node_modules\n**/dist\n**/app\n"), 0644); err != nil {
+		return err
+	}
 
 	// Generate route handlers (skip health — already built in)
 	routeRegistrations := ""
@@ -379,15 +385,14 @@ func main() {
 `, name)
 
 	os.WriteFile(filepath.Join(outPath, "services/api/main.go"), []byte(mainGo), 0644)
-	os.WriteFile(filepath.Join(outPath, "services/api/go.mod"), []byte(fmt.Sprintf("module %s/services/api\n\ngo 1.23\n", name)), 0644)
-	os.WriteFile(filepath.Join(outPath, "services/api/Dockerfile"), []byte(`FROM golang:1.23-alpine AS builder
-WORKDIR /build
+	os.WriteFile(filepath.Join(outPath, "services/api/Dockerfile"), []byte(`FROM golang:1.24-alpine AS builder
+WORKDIR /src
 COPY go.mod ./
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o app .
+COPY services/api ./services/api
+RUN mkdir -p /out && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /out/app ./services/api
 
-FROM scratch
-COPY --from=builder /build/app /app
+FROM scratch AS runtime
+COPY --from=builder /out/app /app
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 EXPOSE 8080
 ENTRYPOINT ["/app"]

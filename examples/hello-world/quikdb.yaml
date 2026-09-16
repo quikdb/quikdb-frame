@@ -1,11 +1,16 @@
 schemaVersion: 1
 name: hello-world
 version: 1.0.0
+goModule: hello-world
 
 services:
   api:
     type: api
     path: services/api
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+      target: runtime
     port: 8080
     routes:
       - /api/*
@@ -15,6 +20,10 @@ services:
   web:
     type: web
     path: services/web
+    build:
+      context: .
+      dockerfile: services/web/Dockerfile
+      target: runtime
     port: 3000
     routes:
       - /*

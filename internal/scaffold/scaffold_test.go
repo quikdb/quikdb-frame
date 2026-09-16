@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/quikdb/quikdb-frame/internal/project"
@@ -21,6 +22,25 @@ func TestInitAndAddProduceCoherentManifests(t *testing.T) {
 	}
 	if manifest.SchemaVersion != 1 || len(manifest.Services) != 2 {
 		t.Fatalf("unexpected initial manifest: %+v", manifest)
+	}
+	rootModule, err := os.ReadFile(filepath.Join(app, "go.mod"))
+	if err != nil || !strings.Contains(string(rootModule), "module fixture-app") {
+		t.Fatalf("root module: %s: %v", rootModule, err)
+	}
+	if _, err := os.Stat(filepath.Join(app, "services", "api", "go.mod")); !os.IsNotExist(err) {
+		t.Fatal("generated a nested API module")
+	}
+	apiSource, err := os.ReadFile(filepath.Join(app, "services", "api", "routes.go"))
+	if err != nil || !strings.Contains(string(apiSource), `"fixture-app/shared/auth"`) {
+		t.Fatalf("API does not import shared auth contract: %v", err)
+	}
+	healthSource, err := os.ReadFile(filepath.Join(app, "services", "api", "health.go"))
+	if err != nil || !strings.Contains(string(healthSource), `"fixture-app/shared/db"`) {
+		t.Fatalf("API does not import shared database contract: %v", err)
+	}
+	apiDockerfile, err := os.ReadFile(filepath.Join(app, "services", "api", "Dockerfile"))
+	if err != nil || !strings.Contains(string(apiDockerfile), "COPY shared ./shared") || !strings.Contains(string(apiDockerfile), "COPY services/api ./services/api") {
+		t.Fatalf("API Dockerfile does not use the declared root context: %v", err)
 	}
 
 	old, err := os.Getwd()
@@ -44,6 +64,9 @@ func TestInitAndAddProduceCoherentManifests(t *testing.T) {
 		if err := json.Unmarshal(data, &config); err != nil {
 			t.Fatalf("generated %s is invalid JSON: %v", configPath, err)
 		}
+		if _, err := os.Stat(filepath.Join("services", tc.serviceType+"-"+tc.name, "go.mod")); !os.IsNotExist(err) {
+			t.Fatalf("generated a nested module for %s", tc.name)
+		}
 	}
 	manifest, err = project.Load("quikdb.yaml")
 	if err != nil {
@@ -64,5 +87,34 @@ func TestInitRejectsInvalidNamesAndDatabaseBeforeWriting(t *testing.T) {
 		if _, err := os.Stat(target); !os.IsNotExist(err) {
 			t.Fatalf("left partial project at %s", target)
 		}
+	}
+}
+
+func TestAddFailsClosedWithoutTheDeclaredRootModule(t *testing.T) {
+	root := t.TempDir()
+	app := filepath.Join(root, "fixture-app")
+	if err := Init(app, "postgres"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(app, "go.mod")); err != nil {
+		t.Fatal(err)
+	}
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(app); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(old); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := Add("api", "billing"); err == nil || !strings.Contains(err.Error(), "project Go module") {
+		t.Fatalf("missing root module result: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(app, "services", "api-billing")); !os.IsNotExist(err) {
+		t.Fatal("left a generated service after module validation failed")
 	}
 }

@@ -1,6 +1,6 @@
 # Frame capability ledger
 
-Last reviewed: 2026-09-14. SPEC.md remains the target; this ledger records implementation
+Last reviewed: 2026-09-16. SPEC.md remains the target; this ledger records implementation
 evidence and release gates. A scaffold, interface or compiling stub does not complete an adapter.
 Deployment and conversion scope follows the QuikDB ops execution plan.
 
@@ -12,10 +12,10 @@ Deployment and conversion scope follows the QuikDB ops execution plan.
 | mobile | No mobile CLI/scaffold | SDK/templates and platform integration |
 | ws | scaffold/add.go generated service | Independent duplex/reconnect/backpressure tests |
 | worker | scaffold/add.go generated service | Queue consumption, idempotency and failure recovery |
-| Project Structure | scaffold/init.go creates directories/files | Coherent shared modules and imports across services |
-| quikdb.yaml | V1 typed parser/schema; init/add/dev use validated services, paths, ports, routes and dependencies | Deploy/routing integration and full build-context contract |
+| Project Structure | One generated root Go module; API/web/added services import shared logging and initial auth/DB contracts | Remote qualification, real provider adapters and full application fixture |
+| quikdb.yaml | V1 typed parser/schema declares Go module plus service source path, port/type, build context, Dockerfile and target | API/runner support for distinct context/Dockerfile/target and routing integration |
 | quikdb.json | Deploy reads per-service JSON | Explicit settings precedence and legacy compatibility |
-| Dockerfile Conventions | Multi-stage Go/web scratch templates | Non-root, CA/TLS, architecture, image size and SBOM gates |
+| Dockerfile Conventions | Root-context multi-stage Go/web scratch templates copy selected service/shared source; final stages copy executable/assets | Remote size/content gates, non-root policy and SBOM |
 | JWT Structure | Generated shared/auth template | Issuer/audience/expiry/algorithm/rotation tests |
 | Refresh Token | No complete Frame application adapter | Rotation/replay/revocation tests |
 | OTP Flow | No complete application provider suite | Provider success/failure/rate-limit integration |
@@ -30,7 +30,7 @@ Deployment and conversion scope follows the QuikDB ops execution plan.
 | Payment Idempotency | Not implemented | Concurrent duplicate delivery oracle |
 | Transaction Ledger | Not implemented | Durable reconciliation and audit |
 | Subscription Lifecycle | Not implemented in Frame | Lifecycle/provider integration |
-| Built-in Database Adapters | shared/db interface/retry helper | Real drivers, transactions, cancellation and pooling |
+| Built-in Database Adapters | Generated services use shared DB configuration/status contract and retry interface | Real drivers, transactions, cancellation and pooling |
 | Connection Behavior | Retry helper; unqualified | TLS, bounds, failover, saturation and leakage tests |
 | Redis | No complete Frame adapter | Authentication/TLS/pooling/failure integration |
 | Migrations | No CLI migration implementation | Apply/status/down policy and isolated DB fixtures |
@@ -38,7 +38,7 @@ Deployment and conversion scope follows the QuikDB ops execution plan.
 | Push Notifications | Empty shared/notify | Each declared provider integration |
 | Email | Empty shared/notify | Each declared provider integration |
 | SMS | Empty shared/notify | Each declared provider integration |
-| Structured Logging | Generated logging example | Structured schema and secret-redaction fixtures |
+| Structured Logging | Generated services use JSON request/lifecycle logging with provider-neutral fields | Secret-redaction, streaming interface and propagation fixtures |
 | Request ID Propagation | Partial generated middleware | Multi-service propagation fixtures |
 | Health Checks | Generated GET /health | Liveness/readiness/dependency semantics |
 | Graceful Shutdown | Generated server shutdown | In-flight requests and worker draining tests |
@@ -48,7 +48,7 @@ Deployment and conversion scope follows the QuikDB ops execution plan.
 | Optimistic Locking | Not implemented | Conflict/retry/transaction fixtures |
 | CLI Installation | v0.1.12 public installer; signed/checksummed binaries; actual Linux/macOS/Windows upgrade passed | Remaining install paths and automatic in-CLI provenance |
 | CLI Project Commands | init/add/dev share project manifest v1; no true source watching | Reload, env loading, dependency startup/health and child cancellation |
-| CLI Deploy Commands | v0.1.11 as-is Git/root detection/explicit monorepo; actual Node fixture + same-ID resume passed | Local/private/commit/lifecycle/management parity |
+| CLI Deploy Commands | As-is Git path released; native discovery consumes manifest path/port/type and blocks unsupported root-context/worker submissions | API/runner root-context support, local/private/commit/lifecycle parity |
 | CLI Convert Commands | Express/Flask handler stubs | Optional bounded conversion with independent business-logic tests |
 | CLI Generate Commands | Not implemented | Resource/endpoint/provider generation fixtures |
 | AI Integration | Generated assistant instruction files | Correct manifest/service guidance and consent for any remote conversion |

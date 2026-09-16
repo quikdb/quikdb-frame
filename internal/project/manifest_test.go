@@ -23,7 +23,7 @@ func TestDefaultManifestRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if parsed.SchemaVersion != 1 || parsed.Services["api"].Port != 8080 || parsed.Routing.Rules[0].Service != "api" {
+	if parsed.SchemaVersion != 1 || parsed.GoModule != "fixture-app" || parsed.Services["api"].Build.Context != "." || parsed.Services["api"].Build.Dockerfile != "services/api/Dockerfile" || parsed.Routing.Rules[0].Service != "api" {
 		t.Fatalf("unexpected round trip: %+v", parsed)
 	}
 }
@@ -46,7 +46,7 @@ routing:
     - path: /api/*    service: api
 `)
 	manifest, err := Parse(data)
-	if err != nil || manifest.SchemaVersion != 1 || manifest.Routing.Rules[0].Service != "api" {
+	if err != nil || manifest.SchemaVersion != 1 || manifest.GoModule != "fixture-app" || manifest.Services["api"].Build.Context != "services/api" || manifest.Routing.Rules[0].Service != "api" {
 		t.Fatalf("manifest %+v: %v", manifest, err)
 	}
 }
@@ -59,6 +59,7 @@ func TestManifestRejectsUnsafeOrIncoherentInput(t *testing.T) {
 	for name, mutate := range map[string]func(*Manifest){
 		"unknown schema": func(m *Manifest) { m.SchemaVersion = 2 },
 		"invalid name":   func(m *Manifest) { m.Name = "../fixture" },
+		"module escape":  func(m *Manifest) { m.GoModule = "../other" },
 		"path escape": func(m *Manifest) {
 			s := m.Services["api"]
 			s.Path = "../api"
@@ -80,6 +81,12 @@ func TestManifestRejectsUnsafeOrIncoherentInput(t *testing.T) {
 			m.Services["api"] = s
 		},
 		"route mismatch": func(m *Manifest) { m.Routing.Rules[0].Service = "web" },
+		"build escape": func(m *Manifest) {
+			s := m.Services["api"]
+			s.Build.Context = "services/api"
+			s.Build.Dockerfile = "shared/Dockerfile"
+			m.Services["api"] = s
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			candidate := valid
@@ -106,7 +113,7 @@ func TestAddServiceProducesValidatedUniqueContract(t *testing.T) {
 		if err != nil {
 			t.Fatalf("add %s: %v", tc.serviceType, err)
 		}
-		if manifest.Services[fullName].Path != "services/"+fullName {
+		if manifest.Services[fullName].Path != "services/"+fullName || manifest.Services[fullName].Build.Context != "." || manifest.Services[fullName].Build.Dockerfile != "services/"+fullName+"/Dockerfile" {
 			t.Fatalf("wrong path for %s", fullName)
 		}
 	}

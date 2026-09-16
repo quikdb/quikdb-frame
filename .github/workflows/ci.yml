@@ -5,7 +5,7 @@ permissions:
 
 on:
   push:
-    branches: [main, feat/frame-deployment-contracts, feat/frame-native-auth, feat/frame-as-is-deployment, feat/frame-cli-management, feat/frame-source-settings, feat/frame-manifest-v1, feat/frame-project-manifest-v1]
+    branches: [main, feat/frame-deployment-contracts, feat/frame-native-auth, feat/frame-as-is-deployment, feat/frame-cli-management, feat/frame-source-settings, feat/frame-manifest-v1, feat/frame-project-manifest-v1, feat/frame-shared-modules-build-context]
   pull_request:
     branches: [main]
 
@@ -104,6 +104,8 @@ jobs:
             "quikdb.yaml"
             ".env.example"
             ".gitignore"
+            ".dockerignore"
+            "go.mod"
             "CLAUDE.md"
             ".cursorrules"
             ".github/copilot-instructions.md"
@@ -118,11 +120,10 @@ jobs:
             "services/api/routes.go"
             "services/api/health.go"
             "services/api/hello.go"
+            "services/api/me.go"
             "services/api/Dockerfile"
             "services/api/quikdb.json"
-            "services/api/go.mod"
             "services/web/server.go"
-            "services/web/go.mod"
             "services/web/index.html"
             "services/web/package.json"
             "services/web/vite.config.ts"
@@ -144,13 +145,13 @@ jobs:
       # ── 3. Build API Service ──
       - name: Build API service
         run: |
-          cd /tmp/test-app/services/api
+          cd /tmp/test-app
           START=$(date +%s%N)
-          go build -ldflags="-s -w" -o api-server .
+          go build -ldflags="-s -w" -o services/api/api-server ./services/api
           END=$(date +%s%N)
           MS=$(( (END - START) / 1000000 ))
-          SIZE=$(ls -lh api-server | awk '{print $5}')
-          SIZE_BYTES=$(stat --printf="%s" api-server)
+          SIZE=$(ls -lh services/api/api-server | awk '{print $5}')
+          SIZE_BYTES=$(stat --printf="%s" services/api/api-server)
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## API Service" >> $GITHUB_STEP_SUMMARY
           echo "- **Build time**: ${MS}ms" >> $GITHUB_STEP_SUMMARY
@@ -159,8 +160,8 @@ jobs:
 
       - name: Test API endpoints
         run: |
-          cd /tmp/test-app/services/api
-          ./api-server &
+          cd /tmp/test-app
+          services/api/api-server &
           API_PID=$!
           sleep 1
 
@@ -184,9 +185,9 @@ jobs:
 
       - name: API cold start time
         run: |
-          cd /tmp/test-app/services/api
+          cd /tmp/test-app
           START=$(date +%s%N)
-          ./api-server &
+          services/api/api-server &
           API_PID=$!
 
           # Poll until responding (max 5s)
@@ -233,7 +234,7 @@ jobs:
         run: |
           cd /tmp/test-app
           $GITHUB_WORKSPACE/quikdb-frame add api auth
-          cd services/api-auth && go build -o /dev/null .
+          go build -o /dev/null ./services/api-auth
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Add Service" >> $GITHUB_STEP_SUMMARY
           echo "- **add api auth**: builds OK" >> $GITHUB_STEP_SUMMARY
@@ -242,14 +243,14 @@ jobs:
         run: |
           cd /tmp/test-app
           $GITHUB_WORKSPACE/quikdb-frame add ws realtime
-          cd services/ws-realtime && go build -o /dev/null .
+          go build -o /dev/null ./services/ws-realtime
           echo "- **add ws realtime**: builds OK" >> $GITHUB_STEP_SUMMARY
 
       - name: Test add worker service
         run: |
           cd /tmp/test-app
           $GITHUB_WORKSPACE/quikdb-frame add worker jobs
-          cd services/worker-jobs && go build -o /dev/null .
+          go build -o /dev/null ./services/worker-jobs
           echo "- **add worker jobs**: builds OK" >> $GITHUB_STEP_SUMMARY
 
       - name: Test add web service
@@ -259,6 +260,7 @@ jobs:
           test -f services/web-dashboard/server.go
           test -f services/web-dashboard/package.json
           test -f services/web-dashboard/index.html
+          go build -o /dev/null ./services/web-dashboard
           echo "- **add web dashboard**: files OK" >> $GITHUB_STEP_SUMMARY
 
       # ── 6. Express Converter ──
@@ -305,15 +307,15 @@ jobs:
           echo "- **Routes detected**: $ROUTE_COUNT" >> $GITHUB_STEP_SUMMARY
 
           # Verify it compiles
-          cd /tmp/express-test-quikdb/services/api
-          go build -o /dev/null .
+          cd /tmp/express-test-quikdb
+          go build -o /dev/null ./services/api
           echo "- **Output compiles**: YES" >> $GITHUB_STEP_SUMMARY
 
       # ── 7. Docker Image (linux/amd64) ──
       - name: Build Docker image
         run: |
-          cd /tmp/test-app/services/api
-          docker build --platform linux/amd64 -t quikdb-frame-test-api .
+          cd /tmp/test-app
+          docker build --platform linux/amd64 --target runtime -f services/api/Dockerfile -t quikdb-frame-test-api .
           SIZE=$(docker images quikdb-frame-test-api --format "{{.Size}}")
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Docker" >> $GITHUB_STEP_SUMMARY
@@ -338,8 +340,8 @@ jobs:
 
       - name: Load test
         run: |
-          cd /tmp/test-app/services/api
-          ./api-server &
+          cd /tmp/test-app
+          services/api/api-server &
           API_PID=$!
           sleep 1
 
