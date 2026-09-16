@@ -85,7 +85,7 @@ jobs:
       - name: Compare container image sizes
         run: |
           docker build --platform linux/amd64 -f scripts/original-express.Dockerfile -t quikdb-frame-original-pilot internal/convert/testdata/express-static
-          docker build --platform linux/amd64 -t quikdb-frame-converted-pilot /tmp/conversion-a/converted
+          docker build --platform linux/amd64 -f /tmp/conversion-a/converted/services/api/Dockerfile -t quikdb-frame-converted-pilot /tmp/conversion-a/converted
           original_bytes=$(docker image inspect quikdb-frame-original-pilot --format '{{.Size}}')
           converted_bytes=$(docker image inspect quikdb-frame-converted-pilot --format '{{.Size}}')
           test "$converted_bytes" -lt "$original_bytes"
