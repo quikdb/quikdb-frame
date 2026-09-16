@@ -143,7 +143,7 @@ func registerRoutes(mux *http.ServeMux) {
 			"uptime":  time.Since(startTime).String(),
 		})
 	})
-	mux.Handle("GET /api/me", auth.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /api/me", auth.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]string{"userId": auth.GetUserID(r)})
 	})))
@@ -197,7 +197,7 @@ func main() {
 		w.Write([]byte(`+"`"+`{"status":"ok","service":"%s"}`+"`"+`))
 	})
 
-	mux.Handle("GET /ws", auth.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /ws", auth.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// WebSocket upgrade handler
 		// TODO: implement with nhooyr.io/websocket
 		w.WriteHeader(http.StatusNotImplemented)

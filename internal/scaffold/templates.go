@@ -140,7 +140,7 @@ import (
 func registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /health", handleHealth)
 	mux.HandleFunc("GET /api/hello", handleHello)
-	mux.Handle("GET /api/me", auth.Middleware(http.HandlerFunc(handleMe)))
+	mux.Handle("GET /api/me", auth.AuthMiddleware(http.HandlerFunc(handleMe)))
 }
 `, name)
 }
