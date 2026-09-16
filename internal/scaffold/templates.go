@@ -2,47 +2,6 @@ package scaffold
 
 import "fmt"
 
-func quikdbYaml(name, dbType string) string {
-	return fmt.Sprintf(`name: %s
-version: 1.0.0
-
-database:
-  primary:
-    type: %s
-    migrations: shared/db/migrations/
-  cache:
-    type: redis
-
-services:
-  api:
-    type: api
-    path: services/api
-    port: 8080
-    routes:
-      - /api/*
-    env:
-      - DATABASE_URL
-      - REDIS_URL
-      - JWT_SECRET
-      - PORT
-
-  web:
-    type: web
-    path: services/web
-    port: 3000
-    routes:
-      - /*
-    env:
-      - API_URL
-      - PORT
-
-routing:
-  rules:
-    - path: /api/*    service: api
-    - path: /*        service: web
-`, name, dbType)
-}
-
 func envExample(name, dbType string) string {
 	dbURL := "postgres://user:pass@localhost:5432/" + name + "?sslmode=disable"
 	if dbType == "mongo" {

@@ -1,0 +1,54 @@
+[
+  {
+    "name": "generated project",
+    "valid": true,
+    "manifest": {
+      "schemaVersion": 1,
+      "name": "fixture-app",
+      "version": "1.0.0",
+      "services": {
+        "api": { "type": "api", "path": "services/api", "port": 8080, "routes": ["/api/*"], "env": ["PORT"] },
+        "worker-email": { "type": "worker", "path": "services/worker-email", "env": ["REDIS_URL"] }
+      },
+      "routing": { "rules": [{ "path": "/api/*", "service": "api" }] }
+    }
+  },
+  {
+    "name": "unsupported schema",
+    "valid": false,
+    "manifest": { "schemaVersion": 2, "name": "fixture", "version": "1.0.0", "services": {}, "routing": {} }
+  },
+  {
+    "name": "path traversal",
+    "valid": false,
+    "manifest": {
+      "schemaVersion": 1,
+      "name": "fixture",
+      "version": "1.0.0",
+      "services": { "api": { "type": "api", "path": "../api", "port": 8080 } },
+      "routing": {}
+    }
+  },
+  {
+    "name": "worker port",
+    "valid": false,
+    "manifest": {
+      "schemaVersion": 1,
+      "name": "fixture",
+      "version": "1.0.0",
+      "services": { "jobs": { "type": "worker", "path": "services/jobs", "port": 8080 } },
+      "routing": {}
+    }
+  },
+  {
+    "name": "unknown field",
+    "valid": false,
+    "manifest": {
+      "schemaVersion": 1,
+      "name": "fixture",
+      "version": "1.0.0",
+      "services": { "api": { "type": "api", "path": "services/api", "port": 8080, "secret": "value" } },
+      "routing": {}
+    }
+  }
+]

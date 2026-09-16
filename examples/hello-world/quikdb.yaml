@@ -1,3 +1,4 @@
+schemaVersion: 1
 name: hello-world
 version: 1.0.0
 
@@ -22,5 +23,7 @@ services:
 
 routing:
   rules:
-    - path: /api/*    service: api
-    - path: /*        service: web
+    - path: /api/*
+      service: api
+    - path: /*
+      service: web

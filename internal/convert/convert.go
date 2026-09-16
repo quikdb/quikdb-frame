@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/quikdb/quikdb-frame/internal/project"
 )
 
 func Run(srcPath, framework string) error {
@@ -240,6 +242,13 @@ func scanExpress(srcPath string) scanResult {
 }
 
 func generateFromScan(outPath string, scan scanResult) error {
+	name := filepath.Base(outPath)
+	name = strings.TrimSuffix(name, "-quikdb")
+	manifest, err := project.New(name, scan.dbType)
+	if err != nil {
+		return err
+	}
+
 	// Create output directory structure
 	dirs := []string{
 		"shared/db",
@@ -255,47 +264,9 @@ func generateFromScan(outPath string, scan scanResult) error {
 		os.MkdirAll(filepath.Join(outPath, dir), 0755)
 	}
 
-	// Generate quikdb.yaml
-	name := filepath.Base(outPath)
-	name = strings.TrimSuffix(name, "-quikdb")
-
-	yaml := fmt.Sprintf(`name: %s
-version: 1.0.0
-
-database:
-  primary:
-    type: %s
-
-services:
-  api:
-    type: api
-    path: services/api
-    port: 8080
-    routes:
-      - /api/*
-    env:
-      - DATABASE_URL
-      - REDIS_URL
-      - JWT_SECRET
-      - PORT
-
-  web:
-    type: web
-    path: services/web
-    port: 3000
-    routes:
-      - /*
-    env:
-      - API_URL
-      - PORT
-
-routing:
-  rules:
-    - path: /api/*    service: api
-    - path: /*        service: web
-`, name, scan.dbType)
-
-	os.WriteFile(filepath.Join(outPath, "quikdb.yaml"), []byte(yaml), 0644)
+	if err := project.Save(filepath.Join(outPath, "quikdb.yaml"), manifest); err != nil {
+		return err
+	}
 
 	// Generate route handlers (skip health — already built in)
 	routeRegistrations := ""
