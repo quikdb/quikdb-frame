@@ -83,11 +83,13 @@ fields). `--port` overrides both port fields. The dry-run prints source/runtime/
 without configuration commands or environment values. As-is `--json` emits a result object;
 errors go to stderr with a nonzero exit. Put flags before an optional native Frame service name.
 
-`--mode frame` selects native Frame behavior. Existing non-Frame source is blocked before
-submission because automatic business-logic conversion is not certified yet. Native services
-whose Docker context differs from their service directory also stop before submission until the
-Compute API and runner can carry context, Dockerfile and target separately. This release does not
-offer managed storage for stateful databases/files or change their schemas/data.
+`--mode frame` keeps native Frame behavior for Frame projects. For local source, it must be paired
+with an explicit `--from` converter. The only qualified pilot is the bounded Express subset below;
+unsupported or ambiguous code stops before login, upload or deployment and never falls back
+automatically. Repository conversion remains unavailable. Native services whose Docker context
+differs from their service directory also stop before submission until the Compute API and runner
+can carry context, Dockerfile and target separately. This release does not offer managed storage
+for stateful databases/files or change their schemas/data.
 
 ## Validate a deployment manifest
 
@@ -208,11 +210,16 @@ ambiguous applications are rejected and continue through the existing as-is depl
 ```bash
 quikdb-frame convert ./my-express-app --from express --json
 quikdb-frame convert ./my-express-app --from express --output ./my-express-app-frame --apply
+quikdb-frame deploy --source ./my-express-app --mode frame --from express --dry-run --json
+quikdb-frame deploy --source ./my-express-app --mode frame --from express --name my-app-frame
 ```
 
 Planning is the default and writes nothing. `--apply` is required to create a native Go/scratch
-Frame project. The output includes a deterministic review plan, source hashes, blank environment
-declarations and an as-is Node manifest for rollback. The original source is never modified.
+Frame project. The integrated deploy command also requires the explicit `--mode frame` choice,
+materializes its candidate in a private temporary workspace and removes that workspace afterward.
+Its review includes deterministic source identity, qualification result and the original Node
+settings needed for an as-is fallback. The original source is never modified. Production upload
+still requires the server to advertise the complete archive execution capability.
 
 See the [Express conversion pilot](docs/EXPRESS_CONVERSION_PILOT.md) for the exact support matrix,
 rejection rules and hosted original-versus-converted response oracle. Flask and all other
@@ -262,3 +269,18 @@ We welcome contributions. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - [X / Twitter](https://x.com/quikdb_online) — follow for updates
 
 Built by the [QuikDB](https://quikdb.com) team.
+
+### Local application uploads (upcoming release)
+
+Keep your existing language/framework and provide its original production settings:
+
+```sh
+quikdb-frame deploy --source ./my-app --config ./my-app/quikdb.json --name my-app --mode as-is --dry-run --json
+quikdb-frame deploy --source ./my-app --config ./my-app/quikdb.json --name my-app --mode as-is
+```
+
+The dry run is offline. Uploads exclude common credential locations, local `.env` files and
+dependency caches; compiled application output is retained. Review source for other secrets
+and configure runtime values separately. Archives are limited to 64 MiB compressed.
+Same-source deployment retains application identity; changing an existing application's
+archive is pending qualified update fencing. This feature is not included in v0.1.15 yet.

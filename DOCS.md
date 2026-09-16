@@ -2,6 +2,11 @@
 
 Last updated: 2026-09-16
 
+The local archive client now requires the complete server-advertised v1 capability before any
+upload. It sends the packaged SHA-256 identity, retries one transient upload failure against the
+idempotent server contract, verifies the returned handle/digest/size, and releases an unused handle
+when deployment creation is rejected. Production activation and a CLI release remain separate gates.
+
 ## Native shared module and build context — stacked feature branch
 
 `internal/project` is the typed source of truth for native `quikdb.yaml`. In addition to validated
@@ -132,7 +137,29 @@ middleware, state and other frameworks fail closed with the as-is path retained.
 
 Applied output is atomic and deterministic: a native Go/scratch Frame service, source-hashed
 review plan, names-only environment template and original Node startup/deployment manifest.
-The original source is not modified. Hosted qualification compares original and converted status,
+The original source is not modified. `deploy --source <path> --mode frame --from express` now
+combines the same fail-closed converter with the archive client: dry-run stays offline and exposes
+the qualification, deterministic source identity and as-is rollback settings; submission uses a
+private temporary converted candidate and removes it afterward. Unsupported input never falls back
+or authenticates. Hosted qualification compares original and converted status,
 content type and body bytes for the fixture oracles, asset bytes, deterministic output, rejection
-fixtures, generated builds and container image size. This branch is unreleased and does not enable
-deployment-time conversion in the API/dashboard. See docs/EXPRESS_CONVERSION_PILOT.md.
+fixtures, generated builds and container image size. Production upload still requires the complete
+server-advertised archive capability; this branch does not activate it or add dashboard conversion
+execution. See docs/EXPRESS_CONVERSION_PILOT.md.
+
+## Local archive uploads — feature branch, not released
+
+2026-09-15: feat/frame-archive-uploads adds deploy --source <directory> --config quikdb.json
+--name <application> --mode as-is. Offline --dry-run --json packages/validates without auth or
+network. Regular files/directories only; rooted reads reject escaping paths/links/special files,
+compressed64MiB/expanded1GiB/file256MiB/20000 entries. Common credential locations/.env files
+and dependency caches are excluded; dist/build output and executable bits retained. Exclusions
+are not a general secret scanner. Runtime values remain explicitly configured separately.
+
+Account preflight precedes uploads. Exact SHA256/size/opaque UUID receipt checked; current
+credential loaded and mutations never automatically retried. Create sends sourceId, never
+Git branch metadata. Repeat same archive observes/resumes the existing ID; mismatched archive/
+Git source fails without upload or a duplicate app. Changed-archive replacement is pending
+safely fenced updates, explicitly not silently reusing old code. Requires activated immutable
+API consumer/compatible application runners; no production activation or version tag yet.
+Remote CI/native/three-platform gates required before release.

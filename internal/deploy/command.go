@@ -17,12 +17,13 @@ import (
 
 // DeployOptions describe original-source deployment. Conversion never happens implicitly.
 type DeployOptions struct {
-	Repo, Branch, Name, Subdirectory, Config, Mode string
-	Port                                           int
-	DryRun, JSON                                   bool
-	Service                                        string
-	explicitConfiguration                          map[string]interface{}
-	manifestVersion                                int
+	Repo, Branch, Name, Subdirectory, Config, Mode, From string
+	Source                                               string
+	Port                                                 int
+	DryRun, JSON                                         bool
+	Service                                              string
+	explicitConfiguration                                map[string]interface{}
+	manifestVersion                                      int
 }
 
 func ParseDeployOptions(args []string) (DeployOptions, error) {
@@ -30,11 +31,13 @@ func ParseDeployOptions(args []string) (DeployOptions, error) {
 	f := flag.NewFlagSet("deploy", flag.ContinueOnError)
 	f.SetOutput(io.Discard)
 	f.StringVar(&o.Repo, "repo", "", "GitHub repository URL")
+	f.StringVar(&o.Source, "source", "", "Local application directory (explicit as-is archive)")
 	f.StringVar(&o.Branch, "branch", "", "Connected branch")
 	f.StringVar(&o.Name, "name", "", "Application name")
 	f.StringVar(&o.Subdirectory, "subdirectory", "", "Service directory")
 	f.StringVar(&o.Config, "config", "", "Explicit deployment configuration JSON")
 	f.StringVar(&o.Mode, "mode", "as-is", "as-is or native Frame")
+	f.StringVar(&o.From, "from", "", "Source framework for explicit Frame conversion")
 	f.IntVar(&o.Port, "port", 0, "Internal application port")
 	f.BoolVar(&o.DryRun, "dry-run", false, "Detect and review without submitting a deployment")
 	f.BoolVar(&o.JSON, "json", false, "Emit a plan/result JSON object")
@@ -55,6 +58,18 @@ func ParseDeployOptions(args []string) (DeployOptions, error) {
 	}
 	if o.Port < 0 || o.Port > 65535 {
 		return o, fmt.Errorf("port must be between 1 and 65535")
+	}
+	if o.Source != "" && (o.Repo != "" || o.Branch != "" || o.Service != "") {
+		return o, fmt.Errorf("--source cannot be combined with repository, branch or native service selection")
+	}
+	if o.Source != "" && o.Mode == "as-is" && (o.Config == "" || o.From != "") {
+		return o, fmt.Errorf("as-is --source requires --config and does not accept --from")
+	}
+	if o.Source != "" && o.Mode == "frame" && (o.From == "" || o.Config != "") {
+		return o, fmt.Errorf("Frame --source requires --from and derives its deployment configuration; omit --config")
+	}
+	if o.Source == "" && o.From != "" {
+		return o, fmt.Errorf("--from requires a local --source and --mode frame")
 	}
 	if strings.Contains(o.Subdirectory, "\\") || strings.HasPrefix(o.Subdirectory, "/") {
 		return o, fmt.Errorf("subdirectory must be a relative repository path")
@@ -77,6 +92,9 @@ func Command(args []string) error {
 	o, err := ParseDeployOptions(args)
 	if err != nil {
 		return err
+	}
+	if o.Source != "" {
+		return commandArchive(o)
 	}
 	_, nativeErr := os.Stat("quikdb.yaml")
 	external := o.Repo != "" || o.Branch != "" || o.Name != "" || o.Config != "" || o.Subdirectory != "" || o.Port != 0

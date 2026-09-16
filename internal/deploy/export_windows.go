@@ -10,6 +10,14 @@ import (
 // CREATE_NEW prevents replacement; the protected DACL is installed at creation,
 // before any secret is fetched, including in directories with broad inherited ACLs.
 func createPrivateExport(path string) (*os.File, error) {
+	return createPrivateWindowsFile(path, windows.GENERIC_WRITE)
+}
+
+func createPrivateArchive(path string) (*os.File, error) {
+	return createPrivateWindowsFile(path, windows.GENERIC_READ|windows.GENERIC_WRITE)
+}
+
+func createPrivateWindowsFile(path string, access uint32) (*os.File, error) {
 	user, err := windows.GetCurrentProcessToken().GetTokenUser()
 	if err != nil {
 		return nil, err
@@ -24,7 +32,7 @@ func createPrivateExport(path string) (*os.File, error) {
 	}
 	attributes := windows.SecurityAttributes{SecurityDescriptor: sd}
 	attributes.Length = uint32(unsafe.Sizeof(attributes))
-	handle, err := windows.CreateFile(name, windows.GENERIC_WRITE, 0, &attributes, windows.CREATE_NEW, windows.FILE_ATTRIBUTE_NORMAL, 0)
+	handle, err := windows.CreateFile(name, access, 0, &attributes, windows.CREATE_NEW, windows.FILE_ATTRIBUTE_NORMAL, 0)
 	runtime.KeepAlive(sd)
 	if err != nil {
 		return nil, err

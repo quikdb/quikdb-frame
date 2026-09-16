@@ -187,15 +187,18 @@ Options for init:
 
 Options for deploy (flags before service name):
   --mode as-is             Preserve the application language/runtime (default)
+  --mode frame             Convert only a qualified local source; never falls back automatically
+  --from express           Select the bounded Express conversion pilot with --source
   --repo <GitHub URL>      Deploy a repository without a local Frame layout
   --branch <branch>        Required with --repo; otherwise use current Git branch
   --name <name>            Application name (default: repository name)
+  --source <directory>    Upload local as-is source; requires --config (no Git branch)
   --subdirectory <path>    Service root; shared detection reads this directory
   --config <path>          Explicit deployment configuration JSON
   --port <port>            Actual internal application port
   --dry-run                Review source/config summary without deployment submission
   --json                   Emit an as-is result JSON object
-  --mode frame             Native Frame only; deployment-time conversion not certified yet
+  --source <directory>     Package a reviewed local application archive
 
 Security:
   QUIKDB_TOKEN             Set this environment variable instead of --token to avoid exposing
