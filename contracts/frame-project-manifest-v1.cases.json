@@ -6,9 +6,10 @@
       "schemaVersion": 1,
       "name": "fixture-app",
       "version": "1.0.0",
+      "goModule": "fixture-app",
       "services": {
-        "api": { "type": "api", "path": "services/api", "port": 8080, "routes": ["/api/*"], "env": ["PORT"] },
-        "worker-email": { "type": "worker", "path": "services/worker-email", "env": ["REDIS_URL"] }
+        "api": { "type": "api", "path": "services/api", "build": { "context": ".", "dockerfile": "services/api/Dockerfile", "target": "runtime" }, "port": 8080, "routes": ["/api/*"], "env": ["PORT"] },
+        "worker-email": { "type": "worker", "path": "services/worker-email", "build": { "context": ".", "dockerfile": "services/worker-email/Dockerfile" }, "env": ["REDIS_URL"] }
       },
       "routing": { "rules": [{ "path": "/api/*", "service": "api" }] }
     }
@@ -16,7 +17,7 @@
   {
     "name": "unsupported schema",
     "valid": false,
-    "manifest": { "schemaVersion": 2, "name": "fixture", "version": "1.0.0", "services": {}, "routing": {} }
+    "manifest": { "schemaVersion": 2, "name": "fixture", "version": "1.0.0", "goModule": "fixture", "services": {}, "routing": {} }
   },
   {
     "name": "path traversal",
@@ -25,7 +26,8 @@
       "schemaVersion": 1,
       "name": "fixture",
       "version": "1.0.0",
-      "services": { "api": { "type": "api", "path": "../api", "port": 8080 } },
+      "goModule": "fixture",
+      "services": { "api": { "type": "api", "path": "../api", "build": { "context": ".", "dockerfile": "services/api/Dockerfile" }, "port": 8080 } },
       "routing": {}
     }
   },
@@ -36,7 +38,8 @@
       "schemaVersion": 1,
       "name": "fixture",
       "version": "1.0.0",
-      "services": { "jobs": { "type": "worker", "path": "services/jobs", "port": 8080 } },
+      "goModule": "fixture",
+      "services": { "jobs": { "type": "worker", "path": "services/jobs", "build": { "context": ".", "dockerfile": "services/jobs/Dockerfile" }, "port": 8080 } },
       "routing": {}
     }
   },
@@ -47,7 +50,8 @@
       "schemaVersion": 1,
       "name": "fixture",
       "version": "1.0.0",
-      "services": { "api": { "type": "api", "path": "services/api", "port": 8080, "secret": "value" } },
+      "goModule": "fixture",
+      "services": { "api": { "type": "api", "path": "services/api", "build": { "context": ".", "dockerfile": "services/api/Dockerfile" }, "port": 8080, "secret": "value" } },
       "routing": {}
     }
   }

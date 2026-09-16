@@ -18,6 +18,16 @@ func Add(svcType, svcName string) error {
 	if err != nil {
 		return err
 	}
+	if err := project.ValidateGoModule("go.mod", manifest.GoModule); err != nil {
+		return fmt.Errorf("cannot add a shared-module service: %w", err)
+	}
+	for name, service := range manifest.Services {
+		if _, err := os.Lstat(filepath.Join(filepath.FromSlash(service.Path), "go.mod")); err == nil {
+			return fmt.Errorf("cannot add a shared-module service while %s has a nested go.mod", name)
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("inspect service %s module boundary: %w", name, err)
+		}
+	}
 	fullName, err := manifest.AddService(svcType, svcName)
 	if err != nil {
 		return err
@@ -32,13 +42,13 @@ func Add(svcType, svcName string) error {
 
 	switch svcType {
 	case "api":
-		err = addAPI(svcDir, svcName, fullName)
+		err = addAPI(svcDir, svcName, fullName, manifest.GoModule, manifest.Services[fullName].Port)
 	case "ws":
-		err = addWS(svcDir, svcName, fullName)
+		err = addWS(svcDir, svcName, fullName, manifest.GoModule, manifest.Services[fullName].Port)
 	case "worker":
-		err = addWorker(svcDir, svcName, fullName)
+		err = addWorker(svcDir, svcName, fullName, manifest.GoModule)
 	case "web":
-		err = addWeb(svcDir, svcName, fullName)
+		err = addWeb(svcDir, svcName, fullName, manifest.GoModule, manifest.Services[fullName].Port)
 	}
 	if err != nil {
 		_ = os.RemoveAll(svcDir)
@@ -58,26 +68,28 @@ func Add(svcType, svcName string) error {
 	return nil
 }
 
-func addAPI(svcDir, name, fullName string) error {
+func addAPI(svcDir, name, fullName, module string, port int) error {
 	os.MkdirAll(filepath.Join(svcDir, "handlers"), 0755)
 
 	files := map[string]string{
 		"main.go": fmt.Sprintf(`package main
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"context"
 	"time"
+
+	"%s/shared/logging"
 )
 
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8080"
+		port = "%d"
 	}
 
 	mux := http.NewServeMux()
@@ -85,7 +97,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:         ":" + port,
-		Handler:      mux,
+		Handler:      logging.RequestLogger(mux),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -95,24 +107,28 @@ func main() {
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
 		<-sigChan
-		log.Println("Shutting down...")
+		logging.Info("shutdown requested")
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		server.Shutdown(ctx)
 	}()
 
-	log.Printf("%s listening on :%%s", port)
+	logging.Info(fmt.Sprintf("%s listening on port %%s", port))
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatal(err)
+		logging.Error("api server stopped unexpectedly")
+		os.Exit(1)
 	}
 }
-`, fullName),
+`, module, port, fullName),
 		"routes.go": fmt.Sprintf(`package main
 
 import (
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"%s/shared/auth"
+	"%s/shared/db"
 )
 
 var startTime = time.Now()
@@ -123,26 +139,19 @@ func registerRoutes(mux *http.ServeMux) {
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":  "ok",
 			"service": "%s",
+			"database": db.Status(),
 			"uptime":  time.Since(startTime).String(),
 		})
 	})
+	mux.Handle("GET /api/me", auth.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]string{"userId": auth.GetUserID(r)})
+	})))
 
 	// Add your %s routes here
 }
-`, fullName, name),
-		"go.mod": fmt.Sprintf("module services/%s\n\ngo 1.23\n", fullName),
-		"Dockerfile": `FROM golang:1.23-alpine AS builder
-WORKDIR /build
-COPY go.mod ./
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o app .
-
-FROM scratch
-COPY --from=builder /build/app /app
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-EXPOSE 8080
-ENTRYPOINT ["/app"]
-`,
+`, module, module, fullName, name),
+		"Dockerfile": goServiceDockerfile(svcDir, port, true),
 		"quikdb.json": fmt.Sprintf(`{
   "name": "%s",
   "type": "api",
@@ -156,26 +165,29 @@ ENTRYPOINT ["/app"]
 	return writeFiles(svcDir, fullName, files)
 }
 
-func addWS(svcDir, name, fullName string) error {
+func addWS(svcDir, name, fullName, module string, port int) error {
 	os.MkdirAll(filepath.Join(svcDir, "handlers"), 0755)
 
 	files := map[string]string{
 		"main.go": fmt.Sprintf(`package main
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"context"
 	"time"
+
+	"%s/shared/auth"
+	"%s/shared/logging"
 )
 
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "8081"
+		port = "%d"
 	}
 
 	mux := http.NewServeMux()
@@ -185,16 +197,16 @@ func main() {
 		w.Write([]byte(`+"`"+`{"status":"ok","service":"%s"}`+"`"+`))
 	})
 
-	mux.HandleFunc("GET /ws", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("GET /ws", auth.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// WebSocket upgrade handler
 		// TODO: implement with nhooyr.io/websocket
 		w.WriteHeader(http.StatusNotImplemented)
 		w.Write([]byte(`+"`"+`{"error":"websocket not yet implemented"}`+"`"+`))
-	})
+	})))
 
 	server := &http.Server{
 		Addr:    ":" + port,
-		Handler: mux,
+		Handler: logging.RequestLogger(mux),
 	}
 
 	go func() {
@@ -206,25 +218,14 @@ func main() {
 		server.Shutdown(ctx)
 	}()
 
-	log.Printf("%s listening on :%%s", port)
+	logging.Info(fmt.Sprintf("%s listening on port %%s", port))
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatal(err)
+		logging.Error("websocket server stopped unexpectedly")
+		os.Exit(1)
 	}
 }
-`, fullName, fullName),
-		"go.mod": fmt.Sprintf("module services/%s\n\ngo 1.23\n", fullName),
-		"Dockerfile": `FROM golang:1.23-alpine AS builder
-WORKDIR /build
-COPY go.mod ./
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o app .
-
-FROM scratch
-COPY --from=builder /build/app /app
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-EXPOSE 8081
-ENTRYPOINT ["/app"]
-`,
+`, module, module, port, fullName, fullName),
+		"Dockerfile": goServiceDockerfile(svcDir, port, true),
 		"quikdb.json": fmt.Sprintf(`{
   "name": "%s",
   "type": "ws",
@@ -238,22 +239,24 @@ ENTRYPOINT ["/app"]
 	return writeFiles(svcDir, fullName, files)
 }
 
-func addWorker(svcDir, name, fullName string) error {
+func addWorker(svcDir, name, fullName, module string) error {
 	os.MkdirAll(svcDir, 0755)
 
 	files := map[string]string{
 		"main.go": fmt.Sprintf(`package main
 
 import (
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"%s/shared/db"
+	"%s/shared/logging"
 )
 
 func main() {
-	log.Printf("%s worker starting...")
+	logging.Info("%s worker starting")
 
 	// TODO: Connect to Redis Stream and consume messages
 	// stream := os.Getenv("REDIS_STREAM")
@@ -268,10 +271,10 @@ func main() {
 	for {
 		select {
 		case <-sigChan:
-			log.Println("Shutting down %s worker...")
+			logging.Info("%s worker shutting down")
 			return
 		case <-ticker.C:
-			log.Println("%s: heartbeat")
+			logging.Info("%s worker heartbeat; database=" + db.Status())
 			process()
 		}
 	}
@@ -281,18 +284,8 @@ func process() {
 	// TODO: implement your worker logic
 	_ = os.Getenv("REDIS_URL")
 }
-`, fullName, fullName, fullName, fullName),
-		"go.mod": fmt.Sprintf("module services/%s\n\ngo 1.23\n", fullName),
-		"Dockerfile": `FROM golang:1.23-alpine AS builder
-WORKDIR /build
-COPY go.mod ./
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o app .
-
-FROM scratch
-COPY --from=builder /build/app /app
-ENTRYPOINT ["/app"]
-`,
+`, module, module, fullName, fullName, fullName, fullName),
+		"Dockerfile": goServiceDockerfile(svcDir, 0, false),
 		"quikdb.json": fmt.Sprintf(`{
   "name": "%s",
   "type": "worker",
@@ -306,18 +299,17 @@ ENTRYPOINT ["/app"]
 	return writeFiles(svcDir, fullName, files)
 }
 
-func addWeb(svcDir, name, fullName string) error {
+func addWeb(svcDir, name, fullName, module string, port int) error {
 	os.MkdirAll(filepath.Join(svcDir, "src"), 0755)
 
 	files := map[string]string{
-		"server.go":      webServerGo("", ""),
-		"go.mod":         fmt.Sprintf("module services/%s\n\ngo 1.23\n", fullName),
+		"server.go":      webServerGoWithPort(module, port),
 		"index.html":     webIndexHtml(name, ""),
 		"package.json":   webPackageJson(name, ""),
 		"vite.config.ts": webViteConfig("", ""),
 		"src/index.tsx":  webIndexTsx("", ""),
 		"src/app.tsx":    webAppTsx(name, ""),
-		"Dockerfile":     webDockerfile("", ""),
+		"Dockerfile":     webServiceDockerfile(svcDir, port),
 		"quikdb.json":    webQuikdbJson(name, ""),
 	}
 

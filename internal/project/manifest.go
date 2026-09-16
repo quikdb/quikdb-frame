@@ -21,6 +21,7 @@ const (
 
 var (
 	namePattern              = regexp.MustCompile(`^[a-z][a-z0-9-]{0,62}$`)
+	modulePattern            = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._~-]*(/[A-Za-z0-9][A-Za-z0-9._~-]*)*$`)
 	versionPattern           = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
 	envPattern               = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 	schemaVersionLinePattern = regexp.MustCompile(`(?m)^schemaVersion\s*:`)
@@ -31,6 +32,7 @@ type Manifest struct {
 	SchemaVersion int                `yaml:"schemaVersion" json:"schemaVersion"`
 	Name          string             `yaml:"name" json:"name"`
 	Version       string             `yaml:"version" json:"version"`
+	GoModule      string             `yaml:"goModule" json:"goModule"`
 	Database      *Database          `yaml:"database,omitempty" json:"database,omitempty"`
 	Services      map[string]Service `yaml:"services" json:"services"`
 	Routing       Routing            `yaml:"routing" json:"routing"`
@@ -49,10 +51,19 @@ type DatabaseTarget struct {
 type Service struct {
 	Type      string   `yaml:"type" json:"type"`
 	Path      string   `yaml:"path" json:"path"`
+	Build     Build    `yaml:"build" json:"build"`
 	Port      int      `yaml:"port,omitempty" json:"port,omitempty"`
 	Routes    []string `yaml:"routes,omitempty" json:"routes,omitempty"`
 	Env       []string `yaml:"env,omitempty" json:"env,omitempty"`
 	DependsOn []string `yaml:"dependsOn,omitempty" json:"dependsOn,omitempty"`
+}
+
+// Build keeps the source root, Docker context and Dockerfile distinct. Context
+// and Dockerfile are repository-relative; Dockerfile must remain inside Context.
+type Build struct {
+	Context    string `yaml:"context" json:"context"`
+	Dockerfile string `yaml:"dockerfile" json:"dockerfile"`
+	Target     string `yaml:"target,omitempty" json:"target,omitempty"`
 }
 
 type Routing struct {
@@ -69,18 +80,19 @@ func New(name, databaseType string) (Manifest, error) {
 		SchemaVersion: CurrentSchemaVersion,
 		Name:          name,
 		Version:       "1.0.0",
+		GoModule:      name,
 		Database: &Database{
 			Primary: &DatabaseTarget{Type: databaseType, Migrations: "shared/db/migrations"},
 			Cache:   &DatabaseTarget{Type: "redis"},
 		},
 		Services: map[string]Service{
 			"api": {
-				Type: "api", Path: "services/api", Port: 8080,
+				Type: "api", Path: "services/api", Build: Build{Context: ".", Dockerfile: "services/api/Dockerfile", Target: "runtime"}, Port: 8080,
 				Routes: []string{"/api/*"},
 				Env:    []string{"DATABASE_URL", "REDIS_URL", "JWT_SECRET", "PORT"},
 			},
 			"web": {
-				Type: "web", Path: "services/web", Port: 3000,
+				Type: "web", Path: "services/web", Build: Build{Context: ".", Dockerfile: "services/web/Dockerfile", Target: "runtime"}, Port: 3000,
 				Routes: []string{"/*"}, Env: []string{"API_URL", "PORT"}, DependsOn: []string{"api"},
 			},
 		},
@@ -133,6 +145,7 @@ func Parse(data []byte) (Manifest, error) {
 		}
 		manifest.SchemaVersion = CurrentSchemaVersion
 	}
+	normalizeBuildDefaults(&manifest)
 	if err := manifest.Validate(); err != nil {
 		return Manifest{}, fmt.Errorf("invalid project manifest: %w", err)
 	}
@@ -175,6 +188,14 @@ func (manifest Manifest) Validate() error {
 	}
 	if !versionPattern.MatchString(manifest.Version) {
 		return fmt.Errorf("version must use major.minor.patch numbers")
+	}
+	if !modulePattern.MatchString(manifest.GoModule) {
+		return fmt.Errorf("goModule must be a clean Go import path")
+	}
+	for _, segment := range strings.Split(manifest.GoModule, "/") {
+		if segment == "." || segment == ".." {
+			return fmt.Errorf("goModule must be a clean Go import path")
+		}
 	}
 	if err := validateDatabase(manifest.Database); err != nil {
 		return err
@@ -246,7 +267,8 @@ func (manifest *Manifest) AddService(serviceType, shortName string) (string, err
 	if _, exists := manifest.Services[fullName]; exists {
 		return "", fmt.Errorf("service %s already exists", fullName)
 	}
-	service := Service{Type: serviceType, Path: "services/" + fullName}
+	servicePath := "services/" + fullName
+	service := Service{Type: serviceType, Path: servicePath, Build: Build{Context: ".", Dockerfile: servicePath + "/Dockerfile", Target: "runtime"}}
 	switch serviceType {
 	case "api":
 		service.Port = manifest.nextPort(8080)
@@ -315,6 +337,20 @@ func validateService(name string, service Service) error {
 	if _, err := cleanRelativePath("service "+name+" path", service.Path); err != nil {
 		return err
 	}
+	contextPath, err := cleanBuildContext("service "+name+" build.context", service.Build.Context)
+	if err != nil {
+		return err
+	}
+	dockerfilePath, err := cleanRelativePath("service "+name+" build.dockerfile", service.Build.Dockerfile)
+	if err != nil {
+		return err
+	}
+	if contextPath != "." && dockerfilePath != contextPath && !strings.HasPrefix(dockerfilePath, contextPath+"/") {
+		return fmt.Errorf("service %s build.dockerfile must be inside build.context", name)
+	}
+	if service.Build.Target != "" && !namePattern.MatchString(service.Build.Target) {
+		return fmt.Errorf("service %s build.target must use a service-style name", name)
+	}
 	if service.Type == "worker" {
 		if service.Port != 0 || len(service.Routes) != 0 {
 			return fmt.Errorf("worker service %s cannot declare a port or routes", name)
@@ -346,6 +382,25 @@ func validateService(name string, service Service) error {
 		seenEnv[variable] = true
 	}
 	return nil
+}
+
+func cleanBuildContext(label, value string) (string, error) {
+	if value == "." {
+		return value, nil
+	}
+	return cleanRelativePath(label, value)
+}
+
+func normalizeBuildDefaults(manifest *Manifest) {
+	if manifest.GoModule == "" {
+		manifest.GoModule = manifest.Name
+	}
+	for name, service := range manifest.Services {
+		if service.Build.Context == "" && service.Build.Dockerfile == "" && service.Path != "" {
+			service.Build = Build{Context: service.Path, Dockerfile: path.Join(service.Path, "Dockerfile")}
+			manifest.Services[name] = service
+		}
+	}
 }
 
 func cleanRelativePath(label, value string) (string, error) {

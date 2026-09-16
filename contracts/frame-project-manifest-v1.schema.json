@@ -4,11 +4,12 @@
   "title": "QuikDB Frame project manifest v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "name", "version", "services", "routing"],
+  "required": ["schemaVersion", "name", "version", "goModule", "services", "routing"],
   "properties": {
     "schemaVersion": { "const": 1 },
     "name": { "$ref": "#/$defs/name" },
     "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "goModule": { "$ref": "#/$defs/modulePath" },
     "database": {
       "type": "object",
       "additionalProperties": false,
@@ -66,6 +67,10 @@
       "minLength": 1,
       "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
     },
+    "modulePath": {
+      "type": "string",
+      "pattern": "^(?!.*(?:^|/)\\.{1,2}(?:/|$))[A-Za-z0-9][A-Za-z0-9._~-]*(?:/[A-Za-z0-9][A-Za-z0-9._~-]*)*$"
+    },
     "route": {
       "type": "string",
       "pattern": "^/[^\\s]*$"
@@ -73,10 +78,25 @@
     "service": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "path"],
+      "required": ["type", "path", "build"],
       "properties": {
         "type": { "enum": ["api", "web", "ws", "worker"] },
         "path": { "$ref": "#/$defs/relativePath" },
+        "build": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["context", "dockerfile"],
+          "properties": {
+            "context": {
+              "anyOf": [
+                { "const": "." },
+                { "$ref": "#/$defs/relativePath" }
+              ]
+            },
+            "dockerfile": { "$ref": "#/$defs/relativePath" },
+            "target": { "$ref": "#/$defs/name" }
+          }
+        },
         "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
         "routes": {
           "type": "array",

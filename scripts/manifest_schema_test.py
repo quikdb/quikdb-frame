@@ -18,4 +18,4 @@ project_validator = Draft202012Validator(project_schema)
 project_cases = json.loads((root / "contracts/frame-project-manifest-v1.cases.json").read_text())
 for case in project_cases:
     assert project_validator.is_valid(case["manifest"]) == case["valid"], case["name"]
-print(f"Frame project schema: {len(project_cases)} contract cases passed; service references, route parity and dependency cycles are additional runtime rules.")
+print(f"Frame project schema: {len(project_cases)} contract cases passed; build containment, service references, route parity and dependency cycles are additional runtime rules.")

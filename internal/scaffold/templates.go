@@ -56,17 +56,39 @@ coverage.out
 `
 }
 
+func dockerignore(name, dbType string) string {
+	return `.git
+.github
+.env
+.env.*
+**/node_modules
+**/dist
+**/*-server
+**/app
+coverage.out
+`
+}
+
+func rootGoMod(name, dbType string) string {
+	return fmt.Sprintf(`module %s
+
+go 1.24
+`, name)
+}
+
 func apiMainGo(name, dbType string) string {
 	return fmt.Sprintf(`package main
 
 import (
-	"log"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"context"
 	"time"
+
+	"%s/shared/logging"
 )
 
 func main() {
@@ -80,7 +102,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:         ":" + port,
-		Handler:      mux,
+		Handler:      logging.RequestLogger(mux),
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -91,39 +113,47 @@ func main() {
 		sigChan := make(chan os.Signal, 1)
 		signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
 		<-sigChan
-		log.Println("Shutting down...")
+		logging.Info("shutdown requested")
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		server.Shutdown(ctx)
 	}()
 
-	log.Printf("%s api listening on :%%s", port)
+	logging.Info(fmt.Sprintf("%s api listening on port %%s", port))
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatal(err)
+		logging.Error("api server stopped unexpectedly")
+		os.Exit(1)
 	}
 }
-`, name)
+`, name, name)
 }
 
 func apiRoutesGo(name, dbType string) string {
-	return `package main
+	return fmt.Sprintf(`package main
 
-import "net/http"
+import (
+	"net/http"
+
+	"%s/shared/auth"
+)
 
 func registerRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /health", handleHealth)
 	mux.HandleFunc("GET /api/hello", handleHello)
+	mux.Handle("GET /api/me", auth.Middleware(http.HandlerFunc(handleMe)))
 }
-`
+`, name)
 }
 
 func apiHealthGo(name, dbType string) string {
-	return `package main
+	return fmt.Sprintf(`package main
 
 import (
 	"encoding/json"
 	"net/http"
 	"time"
+
+	"%s/shared/db"
 )
 
 var startTime = time.Now()
@@ -132,11 +162,12 @@ func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":  "ok",
+		"database": db.Status(),
 		"version": "1.0.0",
 		"uptime":  time.Since(startTime).String(),
 	})
 }
-`
+`, name)
 }
 
 func apiHelloGo(name, dbType string) string {
@@ -156,19 +187,48 @@ func handleHello(w http.ResponseWriter, r *http.Request) {
 `, name)
 }
 
-func apiDockerfile(name, dbType string) string {
-	return `FROM golang:1.23-alpine AS builder
-WORKDIR /build
-COPY go.mod ./
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o app .
+func apiMeGo(name, dbType string) string {
+	return fmt.Sprintf(`package main
 
-FROM scratch
-COPY --from=builder /build/app /app
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-EXPOSE 8080
+import (
+	"encoding/json"
+	"net/http"
+
+	"%s/shared/auth"
+)
+
+func handleMe(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"userId": auth.GetUserID(r)})
+}
+`, name)
+}
+
+func apiDockerfile(name, dbType string) string {
+	return goServiceDockerfile("services/api", 8080, true)
+}
+
+func goServiceDockerfile(servicePath string, port int, certificates bool) string {
+	copyCertificates := ""
+	if certificates {
+		copyCertificates = "COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/\n"
+	}
+	expose := ""
+	if port > 0 {
+		expose = fmt.Sprintf("EXPOSE %d\n", port)
+	}
+	return fmt.Sprintf(`FROM golang:1.24-alpine AS builder
+WORKDIR /src
+COPY go.mod ./
+COPY shared ./shared
+COPY %s ./%s
+RUN mkdir -p /out && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /out/app ./%s
+
+FROM scratch AS runtime
+COPY --from=builder /out/app /app
+%s%s
 ENTRYPOINT ["/app"]
-`
+`, servicePath, servicePath, servicePath, copyCertificates, expose)
 }
 
 func apiQuikdbJson(name, dbType string) string {
@@ -182,27 +242,25 @@ func apiQuikdbJson(name, dbType string) string {
 `, name)
 }
 
-func apiGoMod(name, dbType string) string {
-	return fmt.Sprintf(`module %s/services/api
-
-go 1.23
-`, name)
+func webServerGo(name, dbType string) string {
+	return webServerGoWithPort(name, 3000)
 }
 
-func webServerGo(name, dbType string) string {
-	return `package main
+func webServerGoWithPort(module string, defaultPort int) string {
+	return fmt.Sprintf(`package main
 
 import (
-	"log"
 	"net/http"
 	"os"
 	"strings"
+
+	"%s/shared/logging"
 )
 
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "3000"
+		port = "%d"
 	}
 
 	staticDir := "./static"
@@ -214,7 +272,7 @@ func main() {
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/health" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(` + "`" + `{"status":"ok"}` + "`" + `))
+			w.Write([]byte(`+"`"+`{"status":"ok"}`+"`"+`))
 			return
 		}
 		if strings.Contains(r.URL.Path, ".") {
@@ -224,19 +282,13 @@ func main() {
 		http.ServeFile(w, r, staticDir+"/index.html")
 	})
 
-	log.Printf("web service listening on :%s", port)
-	if err := http.ListenAndServe(":"+port, handler); err != nil {
-		log.Fatal(err)
+	logging.Info("web service listening")
+	if err := http.ListenAndServe(":"+port, logging.RequestLogger(handler)); err != nil {
+		logging.Error("web server stopped unexpectedly")
+		os.Exit(1)
 	}
 }
-`
-}
-
-func webGoMod(name, dbType string) string {
-	return fmt.Sprintf(`module %s/services/web
-
-go 1.23
-`, name)
+`, module, defaultPort)
 }
 
 func webIndexHtml(name, dbType string) string {
@@ -325,24 +377,30 @@ export function App() {
 }
 
 func webDockerfile(name, dbType string) string {
-	return `FROM node:22-alpine AS builder
+	return webServiceDockerfile("services/web", 3000)
+}
+
+func webServiceDockerfile(servicePath string, port int) string {
+	return fmt.Sprintf(`FROM node:22-alpine AS builder
 WORKDIR /build
-COPY package.json ./
+COPY %s/package.json ./
 RUN npm install
-COPY . .
+COPY %s ./
 RUN npm run build
 
-FROM golang:1.23-alpine AS server
-WORKDIR /build
-COPY server.go go.mod ./
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o fileserver .
+FROM golang:1.24-alpine AS server
+WORKDIR /src
+COPY go.mod ./
+COPY shared ./shared
+COPY %s ./%s
+RUN mkdir -p /out && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /out/fileserver ./%s
 
-FROM scratch
-COPY --from=server /build/fileserver /fileserver
+FROM scratch AS runtime
+COPY --from=server /out/fileserver /fileserver
 COPY --from=builder /build/dist /static
-EXPOSE 3000
+EXPOSE %d
 ENTRYPOINT ["/fileserver"]
-`
+`, servicePath, servicePath, servicePath, servicePath, servicePath, port)
 }
 
 func webQuikdbJson(name, dbType string) string {
@@ -374,6 +432,28 @@ type Database interface {
 	Health() string
 }
 
+// Config describes the application-owned database endpoint without exposing it
+// in logs or health responses.
+type Config struct {
+	URL string
+}
+
+func ConfigFromEnv() (Config, error) {
+	url := os.Getenv("DATABASE_URL")
+	if url == "" {
+		return Config{}, fmt.Errorf("DATABASE_URL is not configured")
+	}
+	return Config{URL: url}, nil
+}
+
+// Status is safe to return from a public health response.
+func Status() string {
+	if os.Getenv("DATABASE_URL") == "" {
+		return "not_configured"
+	}
+	return "configured"
+}
+
 // ConnectWithRetry connects to the database with exponential backoff.
 func ConnectWithRetry(db Database, maxRetries int) error {
 	ctx := context.Background()
@@ -384,10 +464,12 @@ func ConnectWithRetry(db Database, maxRetries int) error {
 			if i == maxRetries {
 				return fmt.Errorf("failed to connect after %d retries: %w", maxRetries, err)
 			}
-			delay := delays[i]
-			if i >= len(delays) {
-				delay = delays[len(delays)-1]
-			}
+		var delay time.Duration
+		if i >= len(delays) {
+			delay = delays[len(delays)-1]
+		} else {
+			delay = delays[i]
+		}
 			time.Sleep(delay)
 			continue
 		}
@@ -431,6 +513,9 @@ func CreateToken(userID, email, role string, expiry time.Duration) (string, erro
 	if secret == "" {
 		return "", fmt.Errorf("JWT_SECRET not set")
 	}
+	if userID == "" || expiry <= 0 {
+		return "", fmt.Errorf("user ID and positive expiry are required")
+	}
 
 	now := time.Now().Unix()
 	claims := Claims{
@@ -456,6 +541,9 @@ func CreateToken(userID, email, role string, expiry time.Duration) (string, erro
 func VerifyToken(tokenStr string) (*Claims, error) {
 	secret := os.Getenv("JWT_SECRET")
 	secretOld := os.Getenv("JWT_SECRET_OLD")
+	if secret == "" {
+		return nil, fmt.Errorf("JWT_SECRET not set")
+	}
 
 	claims, err := verifyWithSecret(tokenStr, secret)
 	if err != nil && secretOld != "" {
@@ -465,7 +553,7 @@ func VerifyToken(tokenStr string) (*Claims, error) {
 		return nil, err
 	}
 
-	if time.Now().Unix() > claims.Exp {
+	if claims.UserID == "" || claims.Exp <= claims.Iat || time.Now().Unix() >= claims.Exp {
 		return nil, fmt.Errorf("token expired")
 	}
 
@@ -648,7 +736,9 @@ func (w *statusWriter) WriteHeader(code int) {
 
 func generateRequestID() string {
 	b := make([]byte, 8)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return "req-unavailable"
+	}
 	return "req-" + hex.EncodeToString(b)
 }
 `

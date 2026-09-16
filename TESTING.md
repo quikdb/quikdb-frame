@@ -73,6 +73,8 @@ Verify these exist:
 - [ ] `quikdb.yaml`
 - [ ] `.env.example`
 - [ ] `.gitignore`
+- [ ] `.dockerignore`
+- [ ] `go.mod`
 - [ ] `CLAUDE.md`
 - [ ] `.cursorrules`
 - [ ] `.github/copilot-instructions.md`
@@ -87,11 +89,10 @@ Verify these exist:
 - [ ] `services/api/routes.go`
 - [ ] `services/api/health.go`
 - [ ] `services/api/hello.go`
+- [ ] `services/api/me.go`
 - [ ] `services/api/Dockerfile`
 - [ ] `services/api/quikdb.json`
-- [ ] `services/api/go.mod`
 - [ ] `services/web/server.go`
-- [ ] `services/web/go.mod`
 - [ ] `services/web/index.html`
 - [ ] `services/web/package.json`
 - [ ] `services/web/vite.config.ts`
@@ -225,16 +226,15 @@ quikdb-frame add api auth
 ```
 
 Verify:
-- [ ] `services/auth/main.go` exists
-- [ ] `services/auth/routes.go` exists
-- [ ] `services/auth/Dockerfile` exists
-- [ ] `services/auth/quikdb.json` exists
-- [ ] `services/auth/go.mod` exists
+- [ ] `services/api-auth/main.go` exists
+- [ ] `services/api-auth/routes.go` exists
+- [ ] `services/api-auth/Dockerfile` exists
+- [ ] `services/api-auth/quikdb.json` exists
+- [ ] no nested `go.mod` exists
 
 ```bash
-cd services/auth && go build -o /dev/null . && echo "BUILD OK"
+go build -o /dev/null ./services/api-auth && echo "BUILD OK"
 # PASS if "BUILD OK" prints
-cd ../..
 ```
 
 ### Test 5B: Add WebSocket Service
@@ -244,13 +244,12 @@ quikdb-frame add ws realtime
 ```
 
 Verify:
-- [ ] `services/realtime/main.go` exists
-- [ ] `services/realtime/Dockerfile` exists
+- [ ] `services/ws-realtime/main.go` exists
+- [ ] `services/ws-realtime/Dockerfile` exists
 - [ ] WebSocket upgrade handling in main.go
 
 ```bash
-cd services/realtime && go build -o /dev/null . && echo "BUILD OK"
-cd ../..
+go build -o /dev/null ./services/ws-realtime && echo "BUILD OK"
 ```
 
 ### Test 5C: Add Worker Service
@@ -260,12 +259,11 @@ quikdb-frame add worker jobs
 ```
 
 Verify:
-- [ ] `services/jobs/main.go` exists
+- [ ] `services/worker-jobs/main.go` exists
 - [ ] Worker loop pattern in main.go
 
 ```bash
-cd services/jobs && go build -o /dev/null . && echo "BUILD OK"
-cd ../..
+go build -o /dev/null ./services/worker-jobs && echo "BUILD OK"
 ```
 
 ### Test 5D: Add Web Service

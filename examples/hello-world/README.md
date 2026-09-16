@@ -7,6 +7,7 @@ A minimal quikdb-frame project with one API service and one web service.
 ```
 hello-world/
   quikdb.yaml              # Project manifest
+  go.mod                   # Shared root Go module
   services/
     api/                    # Go API service (3 endpoints)
     web/                    # Preact frontend with Go file server
@@ -50,6 +51,6 @@ CGO_ENABLED=0 go build -ldflags="-s -w" -o fileserver server.go
 
 ## Deploy to QuikDB
 
-```bash
-quikdb-frame deploy
-```
+This example declares repository-root Docker contexts and per-service Dockerfiles. The current
+Compute API/runner cannot yet carry those as separate fields, so `quikdb-frame deploy` fails before
+authentication or submission. Qualify the backend build-context contract before deploying it.

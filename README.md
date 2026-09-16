@@ -45,10 +45,12 @@ cd my-app && quikdb-frame dev
 quikdb-frame deploy
 ```
 
-`deploy` creates services, observes active builds and retries failed/stopped/sleeping services
-using the same deployment ID. Once live, push to the connected branch for Git auto-deployment.
-From v0.1.11, the CLI also deploys existing GitHub applications as-is. Deployment-time
-conversion remains unavailable until preservation checks pass.
+`deploy` creates supported services, observes active builds and retries failed/stopped/sleeping
+services using the same deployment ID. Once live, push to the connected branch for Git
+auto-deployment. From v0.1.11, the CLI also deploys existing GitHub applications as-is.
+Root-context native Frame projects require the pending Compute build-context contract described
+below; the CLI refuses to submit them through an older API/runner. Deployment-time conversion
+remains unavailable until preservation checks pass.
 
 ## Deploy an existing application
 
@@ -81,9 +83,11 @@ fields). `--port` overrides both port fields. The dry-run prints source/runtime/
 without configuration commands or environment values. As-is `--json` emits a result object;
 errors go to stderr with a nonzero exit. Put flags before an optional native Frame service name.
 
-`--mode frame` works for native Frame projects. Existing non-Frame source is blocked before
-submission because automatic business-logic conversion is not certified yet. This release does
-not offer managed storage for stateful databases/files or change their schemas/data.
+`--mode frame` selects native Frame behavior. Existing non-Frame source is blocked before
+submission because automatic business-logic conversion is not certified yet. Native services
+whose Docker context differs from their service directory also stop before submission until the
+Compute API and runner can carry context, Dockerfile and target separately. This release does not
+offer managed storage for stateful databases/files or change their schemas/data.
 
 ## Validate a deployment manifest
 
@@ -149,6 +153,8 @@ A new project starts simple:
 ```
 my-app/
   quikdb.yaml           # Versioned project manifest
+  go.mod                # One module for services and shared Go packages
+  .dockerignore         # Root build-context exclusions
   shared/               # Shared code (auth, db, types)
   services/
     api/                 # Single API service
@@ -170,12 +176,17 @@ Native Frame services compile to Go binaries; frontend dependencies are used dur
 Existing applications keep their original runtime when deployed as-is.
 
 New projects use `schemaVersion: 1` in `quikdb.yaml`. The native project contract validates
-service names, confined paths, unique ports and routes, environment variable names, dependency
-references and routing parity before `dev` starts a process. `add` writes the new service back to
+service names, confined source/build/Dockerfile paths, unique ports and routes, environment
+variable names, dependency references and routing parity before `dev` starts a process. One root
+Go module lets generated services import `shared/logging`, `shared/auth` and `shared/db` without
+copying those packages into each service. Service Dockerfiles use the declared root context and
+copy only shared code plus that service into the build stage. `add` writes the new service back to
 the same manifest. The public JSON Schema is
 [`contracts/frame-project-manifest-v1.schema.json`](contracts/frame-project-manifest-v1.schema.json).
 Older generated manifests without `schemaVersion` load as the v1 shape and are upgraded when
-`add` next writes them. Native deployment and edge routing integration remain in progress.
+`add` next writes them. Earlier v1 manifests without build fields load with their service path as
+the context. Root-context submission, native workers and edge routing remain backend work; the CLI
+fails closed instead of silently building with the wrong context.
 
 ## Principles
 

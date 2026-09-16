@@ -226,6 +226,8 @@ A production-ready e-commerce project:
 ```
 my-app/
   quikdb.yaml                     <- Project manifest
+  go.mod                          <- One module for services and shared packages
+  .dockerignore                   <- Repository-root build exclusions
   .env                            <- Environment variables (gitignored)
   .env.example                    <- Template (committed)
 
@@ -292,7 +294,6 @@ my-app/
         logout.go
       Dockerfile
       quikdb.json
-      go.mod
 
     api-users/
       main.go
@@ -303,7 +304,6 @@ my-app/
         avatar.go
       Dockerfile
       quikdb.json
-      go.mod
 
     api-products/
       main.go
@@ -314,7 +314,6 @@ my-app/
         categories.go
       Dockerfile
       quikdb.json
-      go.mod
 
     api-payments/
       main.go
@@ -326,7 +325,6 @@ my-app/
         refunds.go
       Dockerfile
       quikdb.json
-      go.mod
 
     web/
       src/
@@ -351,7 +349,6 @@ my-app/
       throttle.go                 <- Per-connection event throttling
       Dockerfile
       quikdb.json
-      go.mod
 
     ws-chat/
       main.go
@@ -361,7 +358,6 @@ my-app/
         typing.go
       Dockerfile
       quikdb.json
-      go.mod
 
     ws-notifications/
       main.go
@@ -370,7 +366,6 @@ my-app/
         live_update.go
       Dockerfile
       quikdb.json
-      go.mod
 
     worker-email/
       main.go
@@ -380,7 +375,6 @@ my-app/
         order_confirmation.html
       Dockerfile
       quikdb.json
-      go.mod
 
     worker-media/
       main.go
@@ -389,7 +383,6 @@ my-app/
         thumbnail.go
       Dockerfile
       quikdb.json
-      go.mod
 
     mobile/
       ... (Flutter or Expo structure)
@@ -407,13 +400,15 @@ my-app/
 The project manifest.
 
 ```yaml
+schemaVersion: 1
 name: my-app
 version: 1.0.0
+goModule: my-app
 
 database:
   primary:
     type: postgres
-    migrations: shared/db/migrations/
+    migrations: shared/db/migrations
   cache:
     type: redis
 
@@ -421,6 +416,10 @@ services:
   api-auth:
     type: api
     path: services/api-auth
+    build:
+      context: .
+      dockerfile: services/api-auth/Dockerfile
+      target: runtime
     port: 8080
     routes:
       - /api/auth/*
@@ -437,6 +436,10 @@ services:
   api-users:
     type: api
     path: services/api-users
+    build:
+      context: .
+      dockerfile: services/api-users/Dockerfile
+      target: runtime
     port: 8081
     routes:
       - /api/users/*
@@ -449,6 +452,10 @@ services:
   api-products:
     type: api
     path: services/api-products
+    build:
+      context: .
+      dockerfile: services/api-products/Dockerfile
+      target: runtime
     port: 8082
     routes:
       - /api/products/*
@@ -460,6 +467,10 @@ services:
   api-payments:
     type: api
     path: services/api-payments
+    build:
+      context: .
+      dockerfile: services/api-payments/Dockerfile
+      target: runtime
     port: 8083
     routes:
       - /api/payments/*
@@ -477,6 +488,10 @@ services:
   web:
     type: web
     path: services/web
+    build:
+      context: .
+      dockerfile: services/web/Dockerfile
+      target: runtime
     port: 3000
     routes:
       - /*
@@ -487,6 +502,10 @@ services:
   ws-gateway:
     type: ws
     path: services/ws-gateway
+    build:
+      context: .
+      dockerfile: services/ws-gateway/Dockerfile
+      target: runtime
     port: 8090
     routes:
       - /ws/*
@@ -497,6 +516,10 @@ services:
   ws-chat:
     type: ws
     path: services/ws-chat
+    build:
+      context: .
+      dockerfile: services/ws-chat/Dockerfile
+      target: runtime
     port: 8091
     env:
       - DATABASE_URL
@@ -505,6 +528,10 @@ services:
   ws-notifications:
     type: ws
     path: services/ws-notifications
+    build:
+      context: .
+      dockerfile: services/ws-notifications/Dockerfile
+      target: runtime
     port: 8092
     env:
       - DATABASE_URL
@@ -514,8 +541,10 @@ services:
   worker-email:
     type: worker
     path: services/worker-email
-    trigger: queue
-    stream: stream:emails
+    build:
+      context: .
+      dockerfile: services/worker-email/Dockerfile
+      target: runtime
     env:
       - REDIS_URL
       - SENDGRID_KEY
@@ -524,22 +553,30 @@ services:
   worker-media:
     type: worker
     path: services/worker-media
-    trigger: queue
-    stream: stream:media
+    build:
+      context: .
+      dockerfile: services/worker-media/Dockerfile
+      target: runtime
     env:
       - REDIS_URL
       - S3_BUCKET
 
 routing:
-  domain: my-app.quikdb.net
   rules:
-    - path: /api/auth/*       service: api-auth
-    - path: /api/users/*      service: api-users
-    - path: /api/products/*   service: api-products
-    - path: /api/payments/*   service: api-payments
-    - path: /webhooks/*       service: api-payments
-    - path: /ws/*             service: ws-gateway
-    - path: /*                service: web
+    - path: /api/auth/*
+      service: api-auth
+    - path: /api/users/*
+      service: api-users
+    - path: /api/products/*
+      service: api-products
+    - path: /api/payments/*
+      service: api-payments
+    - path: /webhooks/*
+      service: api-payments
+    - path: /ws/*
+      service: ws-gateway
+    - path: /*
+      service: web
 ```
 
 ---
@@ -565,21 +602,23 @@ Per-service deploy configuration.
 ### Go services (api, ws, worker)
 
 ```dockerfile
-FROM golang:1.23-alpine AS builder
-WORKDIR /build
-COPY go.mod go.sum ./
-RUN go mod download
-COPY . .
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o app .
+FROM golang:1.24-alpine AS builder
+WORKDIR /src
+COPY go.mod ./
+COPY shared ./shared
+COPY services/api-auth ./services/api-auth
+RUN mkdir -p /out && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /out/app ./services/api-auth
 
-FROM scratch
-COPY --from=builder /build/app /app
+FROM scratch AS runtime
+COPY --from=builder /out/app /app
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 EXPOSE 8080
 ENTRYPOINT ["/app"]
 ```
 
 Rules:
+- Docker runs from the declared repository-root context with the service Dockerfile selected explicitly.
+- One root Go module resolves imports from `shared/`; nested service modules are not generated.
 - Multi-stage build. Build stage: `golang:alpine`. Final stage: `scratch`.
 - `CGO_ENABLED=0` for static binary. No libc.
 - `-ldflags="-s -w"` strips debug info.
@@ -591,18 +630,20 @@ Rules:
 ```dockerfile
 FROM node:22-alpine AS builder
 WORKDIR /build
-COPY package.json package-lock.json ./
+COPY services/web/package.json services/web/package-lock.json ./
 RUN npm ci
-COPY . .
+COPY services/web ./
 RUN npm run build
 
-FROM golang:1.23-alpine AS server
-WORKDIR /build
-COPY server.go .
-RUN CGO_ENABLED=0 go build -ldflags="-s -w" -o fileserver .
+FROM golang:1.24-alpine AS server
+WORKDIR /src
+COPY go.mod ./
+COPY shared ./shared
+COPY services/web ./services/web
+RUN mkdir -p /out && CGO_ENABLED=0 go build -ldflags="-s -w" -o /out/fileserver ./services/web
 
-FROM scratch
-COPY --from=server /build/fileserver /fileserver
+FROM scratch AS runtime
+COPY --from=server /out/fileserver /fileserver
 COPY --from=builder /build/dist /static
 COPY --from=server /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 EXPOSE 3000
