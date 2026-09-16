@@ -1,14 +1,18 @@
 package dev
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
-	"sync"
 	"syscall"
+
+	"github.com/quikdb/quikdb-frame/internal/project"
 )
 
 func Run(svcName string) error {
@@ -41,40 +45,58 @@ func Run(svcName string) error {
 
 	fmt.Printf("Starting %d service(s)...\n\n", len(services))
 
-	var wg sync.WaitGroup
 	cmds := make([]*exec.Cmd, 0, len(services))
+	done := make(chan error, len(services))
+	var startFailures []error
 
 	for _, svc := range services {
-		wg.Add(1)
 		s := svc
 		cmd, err := startService(s)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "[%s] Failed to start: %v\n", s.name, err)
-			wg.Done()
+			startFailures = append(startFailures, fmt.Errorf("%s: %w", s.name, err))
 			continue
 		}
 		cmds = append(cmds, cmd)
 		go func() {
-			defer wg.Done()
-			cmd.Wait()
+			done <- cmd.Wait()
 		}()
 	}
+	if len(cmds) == 0 {
+		return fmt.Errorf("all services failed to start: %w", errors.Join(startFailures...))
+	}
 
-	// Graceful shutdown on Ctrl+C
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
-	<-sigChan
-
-	fmt.Println("\nShutting down all services...")
-	for _, cmd := range cmds {
-		if cmd.Process != nil {
-			cmd.Process.Signal(syscall.SIGTERM)
+	defer signal.Stop(sigChan)
+	remaining := len(cmds)
+	var processFailures []error
+	for remaining > 0 {
+		select {
+		case <-sigChan:
+			fmt.Println("\nShutting down all services...")
+			for _, cmd := range cmds {
+				if cmd.Process != nil {
+					_ = cmd.Process.Signal(syscall.SIGTERM)
+				}
+			}
+			for remaining > 0 {
+				<-done
+				remaining--
+			}
+			fmt.Println("All services stopped.")
+			return nil
+		case err := <-done:
+			remaining--
+			if err != nil {
+				processFailures = append(processFailures, err)
+			}
 		}
 	}
-	wg.Wait()
-	fmt.Println("All services stopped.")
-
-	return nil
+	if len(processFailures) == 0 {
+		return errors.New("all services exited")
+	}
+	return fmt.Errorf("all services exited: %w", errors.Join(processFailures...))
 }
 
 type service struct {
@@ -85,47 +107,35 @@ type service struct {
 }
 
 func discoverServices() ([]service, error) {
-	entries, err := os.ReadDir("services")
+	manifest, err := project.Load("quikdb.yaml")
 	if err != nil {
-		return nil, fmt.Errorf("no services/ directory found")
+		return nil, err
 	}
-
-	portCounter := 8080
-	var services []service
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
+	names := make([]string, 0, len(manifest.Services))
+	for name := range manifest.Services {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	services := make([]service, 0, len(names))
+	for _, name := range names {
+		definition := manifest.Services[name]
+		info, err := os.Stat(definition.Path)
+		if err != nil || !info.IsDir() {
+			return nil, fmt.Errorf("service %s path %s is not a directory", name, definition.Path)
 		}
-
-		name := entry.Name()
-		svcPath := filepath.Join("services", name)
-		svcType := detectType(name, svcPath)
-		port := fmt.Sprintf("%d", portCounter)
-		portCounter++
-
+		port := ""
+		if definition.Port != 0 {
+			port = strconv.Itoa(definition.Port)
+		}
 		services = append(services, service{
 			name:    name,
-			path:    svcPath,
-			svcType: svcType,
+			path:    definition.Path,
+			svcType: definition.Type,
 			port:    port,
 		})
 	}
 
 	return services, nil
-}
-
-func detectType(name, path string) string {
-	if strings.HasPrefix(name, "ws-") || name == "ws" {
-		return "ws"
-	}
-	if strings.HasPrefix(name, "worker-") || name == "worker" {
-		return "worker"
-	}
-	if strings.HasPrefix(name, "web") {
-		return "web"
-	}
-	return "api"
 }
 
 func startService(svc service) (*exec.Cmd, error) {
@@ -154,11 +164,18 @@ func startService(svc service) (*exec.Cmd, error) {
 		cmd.Dir = svc.path
 	}
 
-	cmd.Env = append(os.Environ(), "PORT="+svc.port)
+	cmd.Env = os.Environ()
+	if svc.port != "" {
+		cmd.Env = append(cmd.Env, "PORT="+svc.port)
+	}
 	cmd.Stdout = &prefixWriter{prefix: fmt.Sprintf("[%s] ", svc.name), w: os.Stdout}
 	cmd.Stderr = &prefixWriter{prefix: fmt.Sprintf("[%s] ", svc.name), w: os.Stderr}
 
-	fmt.Printf("[%s] %s on :%s\n", svc.name, svc.svcType, svc.port)
+	if svc.port == "" {
+		fmt.Printf("[%s] %s\n", svc.name, svc.svcType)
+	} else {
+		fmt.Printf("[%s] %s on :%s\n", svc.name, svc.svcType, svc.port)
+	}
 
 	if err := cmd.Start(); err != nil {
 		return nil, err

@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/quikdb/quikdb-frame/internal/project"
 )
 
 func Add(svcType, svcName string) error {
@@ -12,28 +14,48 @@ func Add(svcType, svcName string) error {
 		return fmt.Errorf("quikdb.yaml not found. Are you in a quikdb-frame project?")
 	}
 
-	fullName := svcType + "-" + svcName
-	if svcType == "web" {
-		fullName = "web-" + svcName
+	manifest, err := project.Load("quikdb.yaml")
+	if err != nil {
+		return err
+	}
+	fullName, err := manifest.AddService(svcType, svcName)
+	if err != nil {
+		return err
 	}
 	svcDir := filepath.Join("services", fullName)
 
 	if _, err := os.Stat(svcDir); err == nil {
 		return fmt.Errorf("service %s already exists", fullName)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect service %s: %w", fullName, err)
 	}
 
 	switch svcType {
 	case "api":
-		return addAPI(svcDir, svcName, fullName)
+		err = addAPI(svcDir, svcName, fullName)
 	case "ws":
-		return addWS(svcDir, svcName, fullName)
+		err = addWS(svcDir, svcName, fullName)
 	case "worker":
-		return addWorker(svcDir, svcName, fullName)
+		err = addWorker(svcDir, svcName, fullName)
 	case "web":
-		return addWeb(svcDir, svcName, fullName)
-	default:
-		return fmt.Errorf("unknown service type: %s (use: api, ws, worker, web)", svcType)
+		err = addWeb(svcDir, svcName, fullName)
 	}
+	if err != nil {
+		_ = os.RemoveAll(svcDir)
+		return err
+	}
+	if err := project.Save("quikdb.yaml", manifest); err != nil {
+		_ = os.RemoveAll(svcDir)
+		return err
+	}
+
+	fmt.Printf("Added service: %s\n", fullName)
+	fmt.Printf("  Location: %s/\n", svcDir)
+	fmt.Println()
+	fmt.Println("Next: add routes, then run:")
+	fmt.Printf("  quikdb-frame dev %s\n", fullName)
+	fmt.Println()
+	return nil
 }
 
 func addAPI(svcDir, name, fullName string) error {
@@ -160,14 +182,14 @@ func main() {
 
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(` + "`" + `{"status":"ok","service":"%s"}` + "`" + `))
+		w.Write([]byte(`+"`"+`{"status":"ok","service":"%s"}`+"`"+`))
 	})
 
 	mux.HandleFunc("GET /ws", func(w http.ResponseWriter, r *http.Request) {
 		// WebSocket upgrade handler
 		// TODO: implement with nhooyr.io/websocket
 		w.WriteHeader(http.StatusNotImplemented)
-		w.Write([]byte(` + "`" + `{"error":"websocket not yet implemented"}` + "`" + `))
+		w.Write([]byte(`+"`"+`{"error":"websocket not yet implemented"}`+"`"+`))
 	})
 
 	server := &http.Server{
@@ -288,15 +310,15 @@ func addWeb(svcDir, name, fullName string) error {
 	os.MkdirAll(filepath.Join(svcDir, "src"), 0755)
 
 	files := map[string]string{
-		"server.go":    webServerGo("", ""),
-		"go.mod":       fmt.Sprintf("module services/%s\n\ngo 1.23\n", fullName),
-		"index.html":   webIndexHtml(name, ""),
-		"package.json": webPackageJson(name, ""),
+		"server.go":      webServerGo("", ""),
+		"go.mod":         fmt.Sprintf("module services/%s\n\ngo 1.23\n", fullName),
+		"index.html":     webIndexHtml(name, ""),
+		"package.json":   webPackageJson(name, ""),
 		"vite.config.ts": webViteConfig("", ""),
 		"src/index.tsx":  webIndexTsx("", ""),
 		"src/app.tsx":    webAppTsx(name, ""),
-		"Dockerfile":    webDockerfile("", ""),
-		"quikdb.json":   webQuikdbJson(name, ""),
+		"Dockerfile":     webDockerfile("", ""),
+		"quikdb.json":    webQuikdbJson(name, ""),
 	}
 
 	return writeFiles(svcDir, fullName, files)
@@ -306,18 +328,13 @@ func writeFiles(svcDir, fullName string, files map[string]string) error {
 	for path, content := range files {
 		fullPath := filepath.Join(svcDir, path)
 		dir := filepath.Dir(fullPath)
-		os.MkdirAll(dir, 0755)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("create directory for %s: %w", path, err)
+		}
 		if err := os.WriteFile(fullPath, []byte(content), 0644); err != nil {
 			return fmt.Errorf("failed to write %s: %w", path, err)
 		}
 	}
-
-	fmt.Printf("Added service: %s\n", fullName)
-	fmt.Printf("  Location: %s/\n", svcDir)
-	fmt.Println()
-	fmt.Println("Next: add routes, then run:")
-	fmt.Printf("  quikdb-frame dev %s\n", fullName)
-	fmt.Println()
 
 	return nil
 }

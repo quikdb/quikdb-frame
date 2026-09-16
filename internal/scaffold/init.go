@@ -4,11 +4,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/quikdb/quikdb-frame/internal/project"
 )
 
 func Init(name, dbType string) error {
 	if _, err := os.Stat(name); err == nil {
 		return fmt.Errorf("directory %s already exists", name)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("inspect project directory %s: %w", name, err)
+	}
+	baseName := filepath.Base(filepath.Clean(name))
+	manifest, err := project.New(baseName, dbType)
+	if err != nil {
+		return err
 	}
 
 	fmt.Printf("Creating project: %s (database: %s)\n\n", name, dbType)
@@ -37,38 +46,39 @@ func Init(name, dbType string) error {
 	}
 
 	files := map[string]func(string, string) string{
-		"quikdb.yaml":                       quikdbYaml,
-		".env.example":                      envExample,
-		".gitignore":                        gitignore,
-		"services/api/main.go":              apiMainGo,
-		"services/api/routes.go":            apiRoutesGo,
-		"services/api/health.go":            apiHealthGo,
-		"services/api/hello.go":             apiHelloGo,
-		"services/api/Dockerfile":           apiDockerfile,
-		"services/api/quikdb.json":          apiQuikdbJson,
-		"services/api/go.mod":               apiGoMod,
-		"services/web/server.go":            webServerGo,
-		"services/web/go.mod":               webGoMod,
-		"services/web/index.html":           webIndexHtml,
-		"services/web/package.json":         webPackageJson,
-		"services/web/vite.config.ts":       webViteConfig,
-		"services/web/src/index.tsx":        webIndexTsx,
-		"services/web/src/app.tsx":          webAppTsx,
-		"services/web/Dockerfile":           webDockerfile,
-		"services/web/quikdb.json":          webQuikdbJson,
-		"shared/db/database.go":             sharedDbGo,
-		"shared/auth/jwt.go":               sharedJwtGo,
-		"shared/auth/middleware.go":         sharedMiddlewareGo,
-		"shared/logging/logger.go":          sharedLoggerGo,
-		"shared/types/user.go":             sharedUserType,
-		"config/database.yaml":             configDatabase,
-		"config/ratelimit.yaml":            configRatelimit,
-		"CLAUDE.md":                         claudeMd,
-		".cursorrules":                      cursorrules,
-		".github/copilot-instructions.md":   copilotInstructions,
+		".env.example":                    envExample,
+		".gitignore":                      gitignore,
+		"services/api/main.go":            apiMainGo,
+		"services/api/routes.go":          apiRoutesGo,
+		"services/api/health.go":          apiHealthGo,
+		"services/api/hello.go":           apiHelloGo,
+		"services/api/Dockerfile":         apiDockerfile,
+		"services/api/quikdb.json":        apiQuikdbJson,
+		"services/api/go.mod":             apiGoMod,
+		"services/web/server.go":          webServerGo,
+		"services/web/go.mod":             webGoMod,
+		"services/web/index.html":         webIndexHtml,
+		"services/web/package.json":       webPackageJson,
+		"services/web/vite.config.ts":     webViteConfig,
+		"services/web/src/index.tsx":      webIndexTsx,
+		"services/web/src/app.tsx":        webAppTsx,
+		"services/web/Dockerfile":         webDockerfile,
+		"services/web/quikdb.json":        webQuikdbJson,
+		"shared/db/database.go":           sharedDbGo,
+		"shared/auth/jwt.go":              sharedJwtGo,
+		"shared/auth/middleware.go":       sharedMiddlewareGo,
+		"shared/logging/logger.go":        sharedLoggerGo,
+		"shared/types/user.go":            sharedUserType,
+		"config/database.yaml":            configDatabase,
+		"config/ratelimit.yaml":           configRatelimit,
+		"CLAUDE.md":                       claudeMd,
+		".cursorrules":                    cursorrules,
+		".github/copilot-instructions.md": copilotInstructions,
 	}
 
-	baseName := filepath.Base(name)
+	if err := project.Save(filepath.Join(name, "quikdb.yaml"), manifest); err != nil {
+		return err
+	}
 	for path, fn := range files {
 		fullPath := filepath.Join(name, path)
 		dir := filepath.Dir(fullPath)

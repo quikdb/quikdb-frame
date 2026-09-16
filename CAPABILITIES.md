@@ -13,7 +13,7 @@ Deployment and conversion scope follows the QuikDB ops execution plan.
 | ws | scaffold/add.go generated service | Independent duplex/reconnect/backpressure tests |
 | worker | scaffold/add.go generated service | Queue consumption, idempotency and failure recovery |
 | Project Structure | scaffold/init.go creates directories/files | Coherent shared modules and imports across services |
-| quikdb.yaml | Handwritten template; not parsed by deploy/dev | Shared versioned schema, validation and routing integration |
+| quikdb.yaml | V1 typed parser/schema; init/add/dev use validated services, paths, ports, routes and dependencies | Deploy/routing integration and full build-context contract |
 | quikdb.json | Deploy reads per-service JSON | Explicit settings precedence and legacy compatibility |
 | Dockerfile Conventions | Multi-stage Go/web scratch templates | Non-root, CA/TLS, architecture, image size and SBOM gates |
 | JWT Structure | Generated shared/auth template | Issuer/audience/expiry/algorithm/rotation tests |
@@ -47,7 +47,7 @@ Deployment and conversion scope follows the QuikDB ops execution plan.
 | Distributed Locks | Not implemented | Lease/fencing/concurrent-owner fixtures |
 | Optimistic Locking | Not implemented | Conflict/retry/transaction fixtures |
 | CLI Installation | v0.1.12 public installer; signed/checksummed binaries; actual Linux/macOS/Windows upgrade passed | Remaining install paths and automatic in-CLI provenance |
-| CLI Project Commands | init/add/dev; no true source watching | Manifest-driven coherent local development |
+| CLI Project Commands | init/add/dev share project manifest v1; no true source watching | Reload, env loading, dependency startup/health and child cancellation |
 | CLI Deploy Commands | v0.1.11 as-is Git/root detection/explicit monorepo; actual Node fixture + same-ID resume passed | Local/private/commit/lifecycle/management parity |
 | CLI Convert Commands | Express/Flask handler stubs | Optional bounded conversion with independent business-logic tests |
 | CLI Generate Commands | Not implemented | Resource/endpoint/provider generation fixtures |

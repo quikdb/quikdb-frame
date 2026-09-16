@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/quikdb/quikdb-frame/contracts/frame-project-manifest-v1.schema.json",
+  "title": "QuikDB Frame project manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "name", "version", "services", "routing"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "name": { "$ref": "#/$defs/name" },
+    "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "primary": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": { "enum": ["postgres", "mongo", "mysql", "sqlite"] },
+            "migrations": { "$ref": "#/$defs/relativePath" }
+          }
+        },
+        "cache": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": { "type": { "const": "redis" } }
+        }
+      }
+    },
+    "services": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 64,
+      "propertyNames": { "$ref": "#/$defs/name" },
+      "additionalProperties": { "$ref": "#/$defs/service" }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "service"],
+            "properties": {
+              "path": { "$ref": "#/$defs/route" },
+              "service": { "$ref": "#/$defs/name" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{0,62}$"
+    },
+    "relativePath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\).+$"
+    },
+    "route": {
+      "type": "string",
+      "pattern": "^/[^\\s]*$"
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "path"],
+      "properties": {
+        "type": { "enum": ["api", "web", "ws", "worker"] },
+        "path": { "$ref": "#/$defs/relativePath" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "routes": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/route" }
+        },
+        "env": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Z_][A-Z0-9_]*$" }
+        },
+        "dependsOn": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/name" }
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "worker" } }, "required": ["type"] },
+          "then": { "not": { "anyOf": [{ "required": ["port"] }, { "required": ["routes"] }] } },
+          "else": { "required": ["port"] }
+        }
+      ]
+    }
+  }
+}

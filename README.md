@@ -148,7 +148,7 @@ A new project starts simple:
 
 ```
 my-app/
-  quikdb.yaml           # Project manifest
+  quikdb.yaml           # Versioned project manifest
   shared/               # Shared code (auth, db, types)
   services/
     api/                 # Single API service
@@ -168,6 +168,14 @@ quikdb-frame add worker email   # Add email background worker
 
 Native Frame services compile to Go binaries; frontend dependencies are used during asset builds.
 Existing applications keep their original runtime when deployed as-is.
+
+New projects use `schemaVersion: 1` in `quikdb.yaml`. The native project contract validates
+service names, confined paths, unique ports and routes, environment variable names, dependency
+references and routing parity before `dev` starts a process. `add` writes the new service back to
+the same manifest. The public JSON Schema is
+[`contracts/frame-project-manifest-v1.schema.json`](contracts/frame-project-manifest-v1.schema.json).
+Older generated manifests without `schemaVersion` load as the v1 shape and are upgraded when
+`add` next writes them. Native deployment and edge routing integration remain in progress.
 
 ## Principles
 

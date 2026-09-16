@@ -1,6 +1,24 @@
 # quikdb-frame
 
-Last updated: 2026-09-14
+Last updated: 2026-09-16
+
+## Native project manifest v1 — feature branch
+
+`internal/project` is the typed source of truth for native `quikdb.yaml`. It strictly parses one
+bounded regular YAML file, accepts the previous unversioned generated shape as v1, rejects unknown
+fields and validates project/service names, confined paths, service types, unique ports/routes,
+environment names, dependency references/cycles and exact routing parity. The public JSON Schema
+and contract cases live under `contracts/frame-project-manifest-v1.*`.
+
+`init` and the Express/Flask migration scaffold serialize through this contract, removing the
+malformed same-line routing maps. `add` validates its input, writes generated services into the
+manifest and rolls back the new service directory if the manifest cannot be saved. `dev` now uses
+declared service paths, types and ports and returns when every child exits instead of waiting
+forever. Generated API/WS/worker/web `quikdb.json` files are parsed in remote regression tests.
+
+This slice does not wire native deployment/edge routing, shared Go modules, hot reload, production
+API/browser wiring, immutable artifacts or conversion semantics. It is unreleased until its branch
+passes remote CI and is reviewed and merged.
 
 Released v0.1.13 at 4045ff9: feat/frame-cli-management adds ID-based status/inspect/logs/
 history/lifecycle/config/resources/environment/domain management through dashboard APIs.

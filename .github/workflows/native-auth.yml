@@ -1,10 +1,15 @@
 name: Native CLI Auth Validation
 on:
   push:
-    branches: [feat/frame-native-auth, feat/frame-as-is-deployment, feat/frame-cli-management, feat/frame-source-settings, feat/frame-manifest-v1]
+    branches: [feat/frame-native-auth, feat/frame-as-is-deployment, feat/frame-cli-management, feat/frame-source-settings, feat/frame-manifest-v1, feat/frame-project-manifest-v1]
   pull_request:
     paths:
       - internal/deploy/**
+      - internal/project/**
+      - internal/scaffold/**
+      - internal/dev/**
+      - contracts/frame-project-manifest-v1.*
+      - scripts/manifest_schema_test.py
       - go.mod
       - go.sum
       - cmd/quikdb-frame/**
