@@ -220,7 +220,7 @@ func TestDeployDoesNotUploadEnvironmentFiles(t *testing.T) {
 	if request.Subdirectory != "services/api" {
 		t.Fatalf("subdirectory %s", request.Subdirectory)
 	}
-	if request.Configuration["port"] != 8080 || request.Configuration["internalPort"] != 8080 || request.Configuration["appType"] != "go" {
+	if request.Configuration["port"] != float64(8080) || request.Configuration["internalPort"] != float64(8080) || request.Configuration["appType"] != "go" {
 		t.Fatalf("manifest settings were not submitted: %+v", request.Configuration)
 	}
 }
