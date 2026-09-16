@@ -13,10 +13,13 @@ import (
 )
 
 func TestDeployOptionsRejectUnsupportedOrUnsafeInputs(t *testing.T) {
-	for _, args := range [][]string{{"--mode", "magic"}, {"--port", "65536"}, {"--subdirectory", "../secrets"}, {"--subdirectory", "/etc"}, {"--subdirectory", "api\\..\\secrets"}, {"--source", "local"}, {"api", "web"}} {
+	for _, args := range [][]string{{"--mode", "magic"}, {"--port", "65536"}, {"--subdirectory", "../secrets"}, {"--subdirectory", "/etc"}, {"--subdirectory", "api\\..\\secrets"}, {"--source", "local"}, {"--source", "local", "--mode", "frame"}, {"--source", "local", "--mode", "frame", "--from", "express", "--config", "quikdb.json"}, {"--from", "express"}, {"api", "web"}} {
 		if _, err := ParseDeployOptions(args); err == nil {
 			t.Errorf("accepted %v", args)
 		}
+	}
+	if parsed, err := ParseDeployOptions([]string{"--source", "local", "--mode", "frame", "--from", "express"}); err != nil || parsed.From != "express" || parsed.Mode != "frame" {
+		t.Fatalf("explicit local conversion rejected: %+v %v", parsed, err)
 	}
 	for _, repo := range []string{"https://token@github.com/team/app", "https://github.com.evil.test/team/app", "https://github.com/team/app?token=secret", "https://github.com/team/app/tree/main", "https://github.com/team/.."} {
 		o := DeployOptions{Repo: repo, Branch: "main"}

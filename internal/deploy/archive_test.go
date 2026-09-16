@@ -191,6 +191,98 @@ func TestArchiveDryRunIsOfflineAndNeverPrintsSourceOrSecretValues(t *testing.T) 
 		t.Fatal("plan leaked local content")
 	}
 }
+
+func TestConvertedArchiveDryRunIsExplicitOfflineAndShowsRollbackSource(t *testing.T) {
+	oldFactory := deployClientFactory
+	defer func() { deployClientFactory = oldFactory }()
+	deployClientFactory = func() *APIClient { t.Fatal("conversion dry-run requested API/authentication"); return nil }
+	oldOut := os.Stdout
+	read, write, _ := os.Pipe()
+	os.Stdout = write
+	err := Command([]string{"--source", "../convert/testdata/express-static", "--mode", "frame", "--from", "express", "--dry-run", "--json"})
+	write.Close()
+	os.Stdout = oldOut
+	raw, _ := io.ReadAll(read)
+	read.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plan map[string]interface{}
+	if json.Unmarshal(raw, &plan) != nil || plan["mode"] != "frame" || plan["qualification"] != "eligible" || plan["converter"] != "express-static-v1" {
+		t.Fatalf("invalid conversion review: %s", raw)
+	}
+	rollback := plan["rollback"].(map[string]interface{})
+	if rollback["mode"] != "as-is" || rollback["source"] != "unchanged original local source" || len(rollback["sourceDigest"].(string)) != 64 {
+		t.Fatalf("rollback source absent: %#v", rollback)
+	}
+	if strings.Contains(string(raw), "../convert") || strings.Contains(string(raw), "CATALOG_MODE=fixture") {
+		t.Fatal("conversion review leaked a local path or environment value")
+	}
+}
+
+func TestConvertedArchiveRejectsUnsupportedSourceWithoutFallbackOrAPI(t *testing.T) {
+	root := t.TempDir()
+	os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"name":"dynamic","engines":{"node":"20"},"scripts":{"start":"node server.js"},"dependencies":{"express":"4.21.2"}}`), 0600)
+	os.WriteFile(filepath.Join(root, "server.js"), []byte("const express = require(\"express\");\nconst app = express();\napp.get(\"/users\", (req, res) => res.json({id:req.query.id}));\nconst port = process.env.PORT || 8080;\napp.listen(port);\n"), 0600)
+	oldFactory := deployClientFactory
+	defer func() { deployClientFactory = oldFactory }()
+	deployClientFactory = func() *APIClient { t.Fatal("rejected conversion requested API"); return nil }
+	err := Command([]string{"--source", root, "--mode", "frame", "--from", "express", "--json"})
+	if err == nil || !strings.Contains(err.Error(), "deploy the original application with --mode as-is") {
+		t.Fatalf("unsafe conversion did not fail closed: %v", err)
+	}
+}
+
+func TestConvertedArchiveSubmitsGeneratedFrameCandidateOnlyAfterCapability(t *testing.T) {
+	credentialFixture(t)
+	t.Setenv("QUIKDB_TOKEN", "")
+	if err := SaveAuth(&AuthConfig{Token: "fixture-token", ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339)}); err != nil {
+		t.Fatal(err)
+	}
+	var calls []string
+	rootDockerfile := false
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.URL.Path)
+		switch r.URL.Path {
+		case "/api/v1/deployment/list":
+			fmt.Fprint(w, `{"success":true,"data":[]}`)
+		case "/api/v1/deployment/source-capabilities":
+			fmt.Fprint(w, `{"success":true,"data":{"archiveDeployment":true,"archiveUploadVersion":1,"maxArchiveBytes":67108864,"idempotentUploads":true}}`)
+		case "/api/v1/deployment/sources":
+			bytes, _ := io.ReadAll(r.Body)
+			files := readArchive(t, strings.NewReader(string(bytes)))
+			rootDockerfile = strings.Contains(files["Dockerfile"], "FROM scratch AS runtime")
+			hash := sha256.Sum256(bytes)
+			w.WriteHeader(201)
+			fmt.Fprintf(w, `{"success":true,"data":{"sourceId":"%s","sha256":"%s","size":%d}}`, fixtureSourceID, hex.EncodeToString(hash[:]), len(bytes))
+		case "/api/v1/deployment/create":
+			var payload map[string]interface{}
+			json.NewDecoder(r.Body).Decode(&payload)
+			cfg := payload["configuration"].(map[string]interface{})
+			if payload["repositoryUrl"] != nil || payload["sourceId"] != fixtureSourceID || cfg["deploymentApproach"] != "frame" || cfg["converter"] != "express-static-v1" || cfg["appType"] != "go" {
+				t.Errorf("converted request contract changed: %#v", payload)
+			}
+			fmt.Fprint(w, `{"success":true,"data":{"deploymentId":"converted-fixture","status":"pending"}}`)
+		case "/api/v1/deployment/converted-fixture":
+			fmt.Fprint(w, `{"success":true,"data":{"deployment":{"deploymentId":"converted-fixture","status":"live"}}}`)
+		default:
+			t.Errorf("unexpected request %s", r.URL.Path)
+			w.WriteHeader(404)
+		}
+	})
+	oldFactory := deployClientFactory
+	defer func() { deployClientFactory = oldFactory }()
+	deployClientFactory = func() *APIClient { return c }
+	if err := Command([]string{"--source", "../convert/testdata/express-static", "--mode", "frame", "--from", "express", "--name", "converted-fixture", "--json"}); err != nil {
+		t.Fatal(err)
+	}
+	if !rootDockerfile {
+		t.Fatal("converted archive omitted its root deployment Dockerfile")
+	}
+	if strings.Join(calls, ",") != "/api/v1/deployment/list,/api/v1/deployment/source-capabilities,/api/v1/deployment/sources,/api/v1/deployment/create,/api/v1/deployment/converted-fixture" {
+		t.Fatalf("unexpected conversion submission order %v", calls)
+	}
+}
 func TestArchiveCommandUploadsOnlyAfterAccountPreflightThenCreatesByHandle(t *testing.T) {
 	credentialFixture(t)
 	t.Setenv("QUIKDB_TOKEN", "")
