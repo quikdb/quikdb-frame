@@ -256,3 +256,18 @@ We welcome contributions. See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 - [X / Twitter](https://x.com/quikdb_online) — follow for updates
 
 Built by the [QuikDB](https://quikdb.com) team.
+
+### Local application uploads (upcoming release)
+
+Keep your existing language/framework and provide its original production settings:
+
+```sh
+quikdb-frame deploy --source ./my-app --config ./my-app/quikdb.json --name my-app --mode as-is --dry-run --json
+quikdb-frame deploy --source ./my-app --config ./my-app/quikdb.json --name my-app --mode as-is
+```
+
+The dry run is offline. Uploads exclude common credential locations, local `.env` files and
+dependency caches; compiled application output is retained. Review source for other secrets
+and configure runtime values separately. Archives are limited to 64 MiB compressed.
+Same-source deployment retains application identity; changing an existing application's
+archive is pending qualified update fencing. This feature is not included in v0.1.15 yet.
