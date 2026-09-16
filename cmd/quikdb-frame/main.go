@@ -125,22 +125,7 @@ func main() {
 		}
 
 	case "convert":
-		if len(os.Args) < 3 {
-			fmt.Println("Usage: quikdb-frame convert <path> --from <framework>")
-			os.Exit(1)
-		}
-		srcPath := os.Args[2]
-		fromFramework := ""
-		for i, arg := range os.Args {
-			if arg == "--from" && i+1 < len(os.Args) {
-				fromFramework = os.Args[i+1]
-			}
-		}
-		if fromFramework == "" {
-			fmt.Println("Error: --from flag required (express, nestjs, nextjs, fastapi, django, flask)")
-			os.Exit(1)
-		}
-		if err := convert.Run(srcPath, fromFramework); err != nil {
+		if err := convert.Command(os.Args[2:], os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(1)
 		}
@@ -192,7 +177,7 @@ Commands:
   env list|set|remove|export <id>  Manage env; set requires KEY --value-file or --stdin
   domains list|add|remove|verify|repair <id>  Manage app domains, subject to plan limits
   whoami                   Show authenticated account and plan
-  convert <path> --from <framework>  Convert existing project
+  convert <path> --from express      Plan a bounded conversion; --apply writes it
   upgrade                  Upgrade to the latest version
   version                  Print version
   help                     Print this help

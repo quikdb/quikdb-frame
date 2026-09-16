@@ -49,11 +49,11 @@ Deployment and conversion scope follows the QuikDB ops execution plan.
 | CLI Installation | v0.1.12 public installer; signed/checksummed binaries; actual Linux/macOS/Windows upgrade passed | Remaining install paths and automatic in-CLI provenance |
 | CLI Project Commands | init/add/dev share project manifest v1; no true source watching | Reload, env loading, dependency startup/health and child cancellation |
 | CLI Deploy Commands | As-is Git path released; native discovery consumes manifest path/port/type and blocks unsupported root-context/worker submissions | API/runner root-context support, local/private/commit/lifecycle parity |
-| CLI Convert Commands | Express/Flask handler stubs | Optional bounded conversion with independent business-logic tests |
+| CLI Convert Commands | Draft `express-static-v1`: plan-first, explicit apply, deterministic native artifact and as-is rollback; no handler stubs | Hosted exact-version source/target response, asset and image-size gates; review before release |
 | CLI Generate Commands | Not implemented | Resource/endpoint/provider generation fixtures |
 | AI Integration | Generated assistant instruction files | Correct manifest/service guidance and consent for any remote conversion |
-| Converter Process/Mapping | Regex scanning and Go stubs | Syntax/semantic IR, adapters, unsupported-code rejection, source oracle |
-| Supported Source Frameworks | No preservation-certified framework | Per-version support matrix and independent original/target certification |
+| Converter Process/Mapping | Draft strict statement parser accepts only fixed literal Express routes and static mounts; every unrecognized construct fails closed | Hosted source/target oracle and adversarial fixture expansion before release |
+| Supported Source Frameworks | Draft Express 4.21.2/Node 20 static-response pilot only; every other framework remains as-is | Exact-version matrix and independent original/target certification before release |
 | Size Targets | Targets in SPEC; no certified app benchmarks | Publish image/binary/RSS/startup/latency and total cost measurements |
 | Distribution & Awareness | Public installer/release/README and Compute CLI entry | Full onboarding/source/settings parity |
 | What Frame Is / Is Not | Product positioning | Public claims consistent with this ledger and tested support matrix |
