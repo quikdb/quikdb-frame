@@ -1,0 +1,101 @@
+name: Express Conversion Pilot
+
+on:
+  push:
+    branches: [feat/frame-express-static-converter]
+  pull_request:
+    paths:
+      - internal/convert/**
+      - internal/project/**
+      - cmd/quikdb-frame/**
+      - scripts/express_conversion_oracle.mjs
+      - scripts/original-express.Dockerfile
+      - .github/workflows/conversion-pilot.yml
+      - docs/EXPRESS_CONVERSION_PILOT.md
+
+permissions:
+  contents: read
+
+concurrency:
+  group: frame-conversion-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.1'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Test converter contracts
+        run: |
+          go test -v -race ./internal/convert ./internal/project
+          go vet ./internal/convert ./internal/project ./cmd/quikdb-frame
+          go build -o /tmp/quikdb-frame ./cmd/quikdb-frame
+
+      - name: Verify plan-only, explicit apply and deterministic output
+        run: |
+          fixture="$GITHUB_WORKSPACE/internal/convert/testdata/express-static"
+          /tmp/quikdb-frame convert "$fixture" --from express --output /tmp/plan-must-not-exist --json > /tmp/conversion-plan.json
+          test ! -e /tmp/plan-must-not-exist
+          mkdir -p /tmp/conversion-a /tmp/conversion-b
+          /tmp/quikdb-frame convert "$fixture" --from express --output /tmp/conversion-a/converted --apply --json > /tmp/applied-plan.json
+          /tmp/quikdb-frame convert "$fixture" --from express --output /tmp/conversion-b/converted --apply --json > /tmp/applied-plan-2.json
+          diff -ru /tmp/conversion-a/converted /tmp/conversion-b/converted
+          diff -u /tmp/applied-plan.json /tmp/applied-plan-2.json
+          ! grep -R "TODO: implement" /tmp/conversion-a/converted
+          cd /tmp/conversion-a/converted
+          go build -trimpath -ldflags='-s -w' -o /tmp/converted-app ./services/api
+
+      - name: Compare original and converted HTTP outputs
+        run: |
+          set -euo pipefail
+          fixture="$GITHUB_WORKSPACE/internal/convert/testdata/express-static"
+          npm install --prefix "$fixture" --ignore-scripts --no-audit --no-fund
+          PORT=19101 npm start --prefix "$fixture" > /tmp/original-express.log 2>&1 &
+          original_pid=$!
+          PORT=19102 /tmp/converted-app > /tmp/converted-frame.log 2>&1 &
+          converted_pid=$!
+          cleanup() {
+            kill "$original_pid" "$converted_pid" 2>/dev/null || true
+            wait "$original_pid" "$converted_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+          for port in 19101 19102; do
+            for attempt in $(seq 1 50); do
+              if curl --fail --silent "http://127.0.0.1:${port}/health" >/dev/null; then break; fi
+              if [ "$attempt" = 50 ]; then
+                cat /tmp/original-express.log /tmp/converted-frame.log
+                exit 1
+              fi
+              sleep 0.1
+            done
+          done
+          node scripts/express_conversion_oracle.mjs http://127.0.0.1:19101 http://127.0.0.1:19102 | tee /tmp/conversion-parity.json
+          printf '### Express conversion parity\n\n```json\n' >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/conversion-parity.json >> "$GITHUB_STEP_SUMMARY"
+          printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Compare container image sizes
+        run: |
+          docker build --platform linux/amd64 -f scripts/original-express.Dockerfile -t quikdb-frame-original-pilot internal/convert/testdata/express-static
+          docker build --platform linux/amd64 -f /tmp/conversion-a/converted/services/api/Dockerfile -t quikdb-frame-converted-pilot /tmp/conversion-a/converted
+          original_bytes=$(docker image inspect quikdb-frame-original-pilot --format '{{.Size}}')
+          converted_bytes=$(docker image inspect quikdb-frame-converted-pilot --format '{{.Size}}')
+          test "$converted_bytes" -lt "$original_bytes"
+          test "$converted_bytes" -lt 20971520
+          printf 'Original fixture image: %s bytes\nConverted scratch image: %s bytes\n' "$original_bytes" "$converted_bytes"
+          printf '\n### Container size gate\n\n- Original fixture: %s bytes\n- Converted scratch image: %s bytes\n' "$original_bytes" "$converted_bytes" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Clean temporary processes, images and files
+        if: always()
+        run: |
+          pkill -f '/tmp/converted-app' 2>/dev/null || true
+          docker image rm -f quikdb-frame-original-pilot quikdb-frame-converted-pilot 2>/dev/null || true
+          rm -rf internal/convert/testdata/express-static/node_modules internal/convert/testdata/express-static/package-lock.json /tmp/conversion-a /tmp/conversion-b /tmp/converted-app /tmp/conversion-plan.json /tmp/applied-plan.json /tmp/applied-plan-2.json /tmp/conversion-parity.json /tmp/original-express.log /tmp/converted-frame.log

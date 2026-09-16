@@ -1,460 +1,274 @@
+// Package convert implements deliberately bounded source-to-Frame converters.
+// A converter must reject source it cannot prove equivalent; it must never emit
+// placeholder handlers or claim support based only on route discovery.
 package convert
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
-	"regexp"
+	"sort"
 	"strings"
-
-	"github.com/quikdb/quikdb-frame/internal/project"
 )
 
-func Run(srcPath, framework string) error {
-	// Resolve to absolute path before anything else
-	absSrc, err := filepath.Abs(srcPath)
-	if err != nil {
-		return fmt.Errorf("could not resolve path %s: %w", srcPath, err)
-	}
-	srcPath = absSrc
+const converterVersion = "express-static-v1"
 
-	if _, err := os.Stat(srcPath); os.IsNotExist(err) {
-		return fmt.Errorf("source path %s does not exist", srcPath)
-	}
-
-	switch framework {
-	case "express":
-		return convertExpress(srcPath)
-	case "flask":
-		return convertFlask(srcPath)
-	case "nestjs", "nextjs", "fastapi", "django", "gin", "fiber", "spring":
-		return fmt.Errorf("%s converter is not yet implemented. Contributions welcome: https://github.com/quikdb/quikdb-frame/blob/main/CONTRIBUTING.md", framework)
-	default:
-		return fmt.Errorf("unknown framework: %s. Supported: express, nestjs, nextjs, fastapi, django, flask", framework)
-	}
+type Options struct {
+	SourcePath string
+	Framework  string
+	OutputPath string
+	Apply      bool
 }
 
-func convertExpress(srcPath string) error {
-	// Resolve to absolute path for reliable output directory creation
-	absSrc, err := filepath.Abs(srcPath)
-	if err != nil {
-		return fmt.Errorf("could not resolve path %s: %w", srcPath, err)
+type Plan struct {
+	SchemaVersion int             `json:"schemaVersion"`
+	Converter     string          `json:"converter"`
+	Framework     string          `json:"framework"`
+	ProjectName   string          `json:"projectName"`
+	SourceDigest  string          `json:"sourceDigest"`
+	SourceFiles   []SourceFile    `json:"sourceFiles"`
+	Original      OriginalRuntime `json:"original"`
+	Converted     FrameRuntime    `json:"converted"`
+	Routes        []Route         `json:"routes"`
+	StaticMounts  []StaticMount   `json:"staticMounts"`
+	Environment   []string        `json:"environment"`
+	Rollback      Rollback        `json:"rollback"`
+	Limitations   []string        `json:"limitations"`
+	Output        string          `json:"output,omitempty"`
+}
+
+type SourceFile struct {
+	Path   string `json:"path"`
+	SHA256 string `json:"sha256"`
+	Bytes  int64  `json:"bytes"`
+}
+
+type OriginalRuntime struct {
+	Entry          string `json:"entry"`
+	StartCommand   string `json:"startCommand"`
+	StartScript    string `json:"startScript"`
+	InstallCommand string `json:"installCommand"`
+	Port           int    `json:"port"`
+	NodeVersion    string `json:"nodeVersion,omitempty"`
+}
+
+type FrameRuntime struct {
+	Language       string `json:"language"`
+	StartCommand   string `json:"startCommand"`
+	DockerTarget   string `json:"dockerTarget"`
+	BusinessParity string `json:"businessParity"`
+}
+
+type Rollback struct {
+	Mode            string `json:"mode"`
+	Manifest        string `json:"manifest"`
+	SourceAuthority string `json:"sourceAuthority"`
+}
+
+type Route struct {
+	Method      string `json:"method"`
+	Path        string `json:"path"`
+	Status      int    `json:"status"`
+	ContentType string `json:"contentType"`
+	Body        string `json:"body"`
+	Source      string `json:"source"`
+}
+
+type StaticMount struct {
+	Prefix    string       `json:"prefix"`
+	Directory string       `json:"directory"`
+	Files     []SourceFile `json:"files"`
+}
+
+// Command parses the public CLI contract. Planning is the default and has no
+// filesystem side effects; --apply is required to create a converted project.
+func Command(args []string, output io.Writer) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: quikdb-frame convert <path> --from express [--output <path>] [--apply] [--json]")
 	}
-	srcPath = absSrc
-
-	fmt.Println("Scanning Express project...")
-	fmt.Println()
-
-	scan := scanExpress(srcPath)
-
-	fmt.Printf("Found: %d routes, %d middleware, %d models, %d env vars\n",
-		len(scan.routes), len(scan.middleware), len(scan.models), len(scan.envVars))
-	fmt.Println()
-
-	// Generate output
-	outPath := srcPath + "-quikdb"
-	if err := generateFromScan(outPath, scan); err != nil {
+	opts := Options{SourcePath: args[0]}
+	jsonOutput := false
+	seen := map[string]bool{}
+	for i := 1; i < len(args); i++ {
+		arg := args[i]
+		if seen[arg] {
+			return fmt.Errorf("duplicate conversion option %s", arg)
+		}
+		switch arg {
+		case "--from", "--output":
+			seen[arg] = true
+			if i+1 >= len(args) || strings.HasPrefix(args[i+1], "--") {
+				return fmt.Errorf("%s requires a value", arg)
+			}
+			i++
+			if arg == "--from" {
+				opts.Framework = args[i]
+			} else {
+				opts.OutputPath = args[i]
+			}
+		case "--apply":
+			seen[arg] = true
+			opts.Apply = true
+		case "--json":
+			seen[arg] = true
+			jsonOutput = true
+		default:
+			return fmt.Errorf("unexpected conversion argument %q", arg)
+		}
+	}
+	if opts.Framework == "" {
+		return fmt.Errorf("--from is required; the only qualified pilot is express")
+	}
+	plan, err := Run(opts)
+	if err != nil {
 		return err
 	}
-
-	fmt.Println("Converting...")
-	fmt.Printf("Done. Output: %s/\n\n", outPath)
-
-	fmt.Println("Generated:")
-	fmt.Printf("  %s/\n", outPath)
-	fmt.Println("  ├── quikdb.yaml")
-	fmt.Println("  ├── shared/")
-	fmt.Println("  ├── services/")
-	fmt.Println("  │   ├── api/          (Go REST API)")
-	fmt.Println("  │   └── web/          (Preact + Go file server)")
-	fmt.Println("  └── CLAUDE.md")
-	fmt.Println()
-	fmt.Println("Next steps:")
-	fmt.Printf("  cd %s\n", outPath)
-	fmt.Println("  # Review generated Go code")
-	fmt.Println("  # Add your business logic to the handler stubs")
-	fmt.Println("  quikdb-frame dev")
-	fmt.Println()
-
-	return nil
+	if jsonOutput {
+		encoder := json.NewEncoder(output)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(plan)
+	}
+	action := "Plan ready; no files were written. Review it, then rerun with --apply."
+	if opts.Apply {
+		action = "Converted project written. Review conversion/conversion-plan.json and run the parity checks before deployment."
+	}
+	_, err = fmt.Fprintf(output, "%s\nFramework: %s (%s)\nRoutes: %d\nSource digest: %s\nOutput: %s\nRollback: deploy the unchanged original source with %s\n",
+		action, plan.Framework, plan.Converter, len(plan.Routes), plan.SourceDigest, plan.Output, plan.Rollback.Manifest)
+	return err
 }
 
-type scanResult struct {
-	routes     []routeInfo
-	middleware []string
-	models     []string
-	envVars    []string
-	hasWS      bool
-	hasStatic  bool
-	dbType     string
+// Run validates the complete supported source subset before it writes output.
+func Run(options Options) (Plan, error) {
+	framework := strings.ToLower(strings.TrimSpace(options.Framework))
+	if framework != "express" {
+		if framework == "" {
+			framework = "unspecified"
+		}
+		return Plan{}, fmt.Errorf("%s conversion is not qualified; use --mode as-is", framework)
+	}
+	source, err := canonicalDirectory(options.SourcePath)
+	if err != nil {
+		return Plan{}, err
+	}
+	output := options.OutputPath
+	if output == "" {
+		output = source + "-quikdb"
+	}
+	output, err = filepath.Abs(output)
+	if err != nil {
+		return Plan{}, fmt.Errorf("resolve conversion output: %w", err)
+	}
+	if insidePath(source, output) {
+		return Plan{}, fmt.Errorf("conversion output must be outside the original source directory")
+	}
+
+	analysis, err := analyzeExpress(source)
+	if err != nil {
+		return Plan{}, err
+	}
+	plan := analysis.plan
+	plan.Output = filepath.Base(filepath.Clean(output))
+	if !options.Apply {
+		return plan, nil
+	}
+	if _, err := os.Lstat(output); err == nil {
+		return Plan{}, fmt.Errorf("conversion output already exists: %s", output)
+	} else if !os.IsNotExist(err) {
+		return Plan{}, fmt.Errorf("inspect conversion output: %w", err)
+	}
+	if err := writeConvertedProject(output, source, analysis, plan); err != nil {
+		return Plan{}, err
+	}
+	return plan, nil
 }
 
-type routeInfo struct {
-	method string
-	path   string
-	file   string
+func canonicalDirectory(input string) (string, error) {
+	abs, err := filepath.Abs(input)
+	if err != nil {
+		return "", fmt.Errorf("resolve source directory: %w", err)
+	}
+	real, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return "", fmt.Errorf("resolve source directory: %w", err)
+	}
+	info, err := os.Lstat(real)
+	if err != nil || !info.IsDir() {
+		return "", fmt.Errorf("source must be an existing directory")
+	}
+	return real, nil
 }
 
-func scanExpress(srcPath string) scanResult {
-	result := scanResult{}
+func insidePath(parent, child string) bool {
+	rel, err := filepath.Rel(parent, child)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
 
-	// Scan for routes
-	routePatterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?:app|router)\.(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]`),
-		regexp.MustCompile(`@(Get|Post|Put|Patch|Delete)\s*\(\s*['"]([^'"]*)['"]\s*\)`),
+func encodePlan(plan Plan) ([]byte, error) {
+	data, err := json.MarshalIndent(plan, "", "  ")
+	if err != nil {
+		return nil, err
 	}
+	return append(data, '\n'), nil
+}
 
-	middlewarePatterns := []*regexp.Regexp{
-		regexp.MustCompile(`app\.use\s*\(\s*(\w+)`),
-		regexp.MustCompile(`(?:cors|helmet|morgan|bodyParser|express\.json|express\.urlencoded|cookieParser|session|passport)`),
+func compactJSON(raw string) (string, error) {
+	var decoded any
+	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
+		return "", err
 	}
-
-	// Walk source files
-	filepath.Walk(srcPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil
-		}
-		if info.IsDir() {
-			name := info.Name()
-			if name == "node_modules" || name == ".git" || name == "dist" || name == "build" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-
-		ext := filepath.Ext(path)
-		if ext != ".js" && ext != ".ts" && ext != ".tsx" && ext != ".jsx" && ext != ".mjs" {
-			return nil
-		}
-
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return nil
-		}
-		content := string(data)
-		relPath, _ := filepath.Rel(srcPath, path)
-
-		// Find routes
-		for _, pattern := range routePatterns {
-			matches := pattern.FindAllStringSubmatch(content, -1)
-			for _, m := range matches {
-				result.routes = append(result.routes, routeInfo{
-					method: strings.ToUpper(m[1]),
-					path:   m[2],
-					file:   relPath,
-				})
-			}
-		}
-
-		// Find middleware
-		for _, pattern := range middlewarePatterns {
-			matches := pattern.FindAllStringSubmatch(content, -1)
-			for _, m := range matches {
-				mw := m[0]
-				if len(m) > 1 {
-					mw = m[1]
-				}
-				if !contains(result.middleware, mw) {
-					result.middleware = append(result.middleware, mw)
-				}
-			}
-		}
-
-		// Detect WebSocket
-		if strings.Contains(content, "socket.io") || strings.Contains(content, "ws") && strings.Contains(content, "WebSocket") {
-			result.hasWS = true
-		}
-
-		// Detect database
-		if strings.Contains(content, "mongoose") || strings.Contains(content, "mongodb") {
-			result.dbType = "mongo"
-		} else if strings.Contains(content, "prisma") || strings.Contains(content, "sequelize") || strings.Contains(content, "pg") {
-			result.dbType = "postgres"
-		}
-
-		// Detect models
-		if strings.Contains(relPath, "model") || strings.Contains(relPath, "schema") {
-			modelName := strings.TrimSuffix(filepath.Base(relPath), ext)
-			modelName = strings.TrimSuffix(modelName, ".model")
-			modelName = strings.TrimSuffix(modelName, ".schema")
-			if modelName != "" && !contains(result.models, modelName) {
-				result.models = append(result.models, modelName)
-			}
-		}
-
-		return nil
-	})
-
-	// Scan .env or .env.example
-	for _, envFile := range []string{".env.example", ".env", ".env.sample"} {
-		envPath := filepath.Join(srcPath, envFile)
-		if data, err := os.ReadFile(envPath); err == nil {
-			lines := strings.Split(string(data), "\n")
-			for _, line := range lines {
-				line = strings.TrimSpace(line)
-				if line == "" || strings.HasPrefix(line, "#") {
-					continue
-				}
-				parts := strings.SplitN(line, "=", 2)
-				if len(parts) >= 1 && !contains(result.envVars, parts[0]) {
-					result.envVars = append(result.envVars, parts[0])
-				}
-			}
-			break
-		}
+	var output bytes.Buffer
+	if err := json.Compact(&output, []byte(raw)); err != nil {
+		return "", err
 	}
+	return output.String(), nil
+}
 
-	// Check for static files
-	for _, dir := range []string{"public", "static", "assets"} {
-		if _, err := os.Stat(filepath.Join(srcPath, dir)); err == nil {
-			result.hasStatic = true
-			break
-		}
+func sourceDigest(files []SourceFile) string {
+	h := sha256.New()
+	for _, file := range files {
+		fmt.Fprintf(h, "%s\x00%s\x00%d\n", file.Path, file.SHA256, file.Bytes)
 	}
+	return hex.EncodeToString(h.Sum(nil))
+}
 
-	// Check package.json for more info
-	pkgPath := filepath.Join(srcPath, "package.json")
-	if data, err := os.ReadFile(pkgPath); err == nil {
-		var pkg map[string]interface{}
-		if json.Unmarshal(data, &pkg) == nil {
-			if deps, ok := pkg["dependencies"].(map[string]interface{}); ok {
-				for dep := range deps {
-					if dep == "socket.io" || dep == "ws" {
-						result.hasWS = true
-					}
-					if dep == "mongoose" || dep == "mongodb" {
-						result.dbType = "mongo"
-					}
-					if dep == "pg" || dep == "prisma" || dep == "@prisma/client" {
-						result.dbType = "postgres"
-					}
-				}
-			}
-		}
+func readRegularFile(root, relative string, limit int64) ([]byte, SourceFile, error) {
+	clean := filepath.Clean(filepath.FromSlash(relative))
+	if clean == "." || filepath.IsAbs(clean) || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return nil, SourceFile{}, fmt.Errorf("unsafe source path %q", relative)
 	}
-
-	if result.dbType == "" {
-		result.dbType = "postgres"
+	path := filepath.Join(root, clean)
+	if !insidePath(root, path) {
+		return nil, SourceFile{}, fmt.Errorf("source path escapes project root: %q", relative)
 	}
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, SourceFile{}, fmt.Errorf("read %s: %w", relative, err)
+	}
+	if !info.Mode().IsRegular() || info.Size() > limit {
+		return nil, SourceFile{}, fmt.Errorf("%s must be a regular file no larger than %d bytes", relative, limit)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, SourceFile{}, fmt.Errorf("read %s: %w", relative, err)
+	}
+	sum := sha256.Sum256(data)
+	return data, SourceFile{Path: filepath.ToSlash(clean), SHA256: hex.EncodeToString(sum[:]), Bytes: info.Size()}, nil
+}
 
+func sortedUnique(values []string) []string {
+	set := map[string]bool{}
+	for _, value := range values {
+		set[value] = true
+	}
+	result := make([]string, 0, len(set))
+	for value := range set {
+		result = append(result, value)
+	}
+	sort.Strings(result)
 	return result
-}
-
-func generateFromScan(outPath string, scan scanResult) error {
-	name := filepath.Base(outPath)
-	name = strings.TrimSuffix(name, "-quikdb")
-	manifest, err := project.New(name, scan.dbType)
-	if err != nil {
-		return err
-	}
-
-	// Create output directory structure
-	dirs := []string{
-		"shared/db",
-		"shared/auth",
-		"shared/types",
-		"shared/logging",
-		"services/api/handlers",
-		"services/web/src",
-		"config",
-	}
-
-	for _, dir := range dirs {
-		os.MkdirAll(filepath.Join(outPath, dir), 0755)
-	}
-
-	if err := project.Save(filepath.Join(outPath, "quikdb.yaml"), manifest); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(outPath, "go.mod"), []byte(fmt.Sprintf("module %s\n\ngo 1.24\n", name)), 0644); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(outPath, ".dockerignore"), []byte(".git\n.env\n.env.*\n**/node_modules\n**/dist\n**/app\n"), 0644); err != nil {
-		return err
-	}
-
-	// Generate route handlers (skip health — already built in)
-	routeRegistrations := ""
-	for _, r := range scan.routes {
-		if r.path == "/health" || r.path == "/api/health" {
-			continue
-		}
-		handlerName := routeToHandlerName(r.method, r.path)
-		routeRegistrations += fmt.Sprintf("\tmux.HandleFunc(\"%s %s\", %s)\n", r.method, r.path, handlerName)
-	}
-
-	// routes.go
-	routesGo := fmt.Sprintf(`package main
-
-import "net/http"
-
-func registerRoutes(mux *http.ServeMux) {
-	// Health check
-	mux.HandleFunc("GET /health", handleHealth)
-
-	// Converted routes from Express
-%s}
-`, routeRegistrations)
-
-	os.WriteFile(filepath.Join(outPath, "services/api/routes.go"), []byte(routesGo), 0644)
-
-	// Generate handler stubs
-	handlers := `package main
-
-import (
-	"encoding/json"
-	"net/http"
-	"time"
-)
-
-var startTime = time.Now()
-
-func handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"status": "ok",
-		"uptime": time.Since(startTime).String(),
-	})
-}
-
-`
-	for _, r := range scan.routes {
-		if r.path == "/health" || r.path == "/api/health" {
-			continue
-		}
-		handlerName := routeToHandlerName(r.method, r.path)
-		handlers += fmt.Sprintf(`// %s %s (from %s)
-func %s(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"message": "TODO: implement %s %s",
-	})
-}
-
-`, r.method, r.path, r.file, handlerName, r.method, r.path)
-	}
-
-	os.WriteFile(filepath.Join(outPath, "services/api/handlers.go"), []byte(handlers), 0644)
-
-	// main.go
-	mainGo := fmt.Sprintf(`package main
-
-import (
-	"log"
-	"net/http"
-	"os"
-	"os/signal"
-	"syscall"
-	"context"
-	"time"
-)
-
-func main() {
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-
-	mux := http.NewServeMux()
-	registerRoutes(mux)
-
-	server := &http.Server{
-		Addr:         ":" + port,
-		Handler:      mux,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
-	}
-
-	go func() {
-		sigChan := make(chan os.Signal, 1)
-		signal.Notify(sigChan, syscall.SIGTERM, syscall.SIGINT)
-		<-sigChan
-		log.Println("Shutting down...")
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		server.Shutdown(ctx)
-	}()
-
-	log.Printf("%s api listening on :%%s", port)
-	if err := server.ListenAndServe(); err != http.ErrServerClosed {
-		log.Fatal(err)
-	}
-}
-`, name)
-
-	os.WriteFile(filepath.Join(outPath, "services/api/main.go"), []byte(mainGo), 0644)
-	os.WriteFile(filepath.Join(outPath, "services/api/Dockerfile"), []byte(`FROM golang:1.24-alpine AS builder
-WORKDIR /src
-COPY go.mod ./
-COPY services/api ./services/api
-RUN mkdir -p /out && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o /out/app ./services/api
-
-FROM scratch AS runtime
-COPY --from=builder /out/app /app
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-EXPOSE 8080
-ENTRYPOINT ["/app"]
-`), 0644)
-
-	// .env.example
-	envContent := ""
-	for _, v := range scan.envVars {
-		envContent += v + "=\n"
-	}
-	if envContent == "" {
-		envContent = "DATABASE_URL=\nREDIS_URL=\nJWT_SECRET=\nPORT=8080\n"
-	}
-	os.WriteFile(filepath.Join(outPath, ".env.example"), []byte(envContent), 0644)
-
-	// CLAUDE.md
-	claudeMd := fmt.Sprintf(`# %s — converted to quikdb-frame
-
-## Original framework: Express
-## Converted routes: %d
-## Models: %s
-
-## Architecture
-Single api service with all routes. Split into multiple services as needed.
-
-## Strict rules
-- All Go services: CGO_ENABLED=0, single static binary, scratch Docker image
-- All services read PORT from environment
-- GET /health returns JSON with status
-- NO node_modules in production
-- Graceful shutdown on SIGTERM
-`, name, len(scan.routes), strings.Join(scan.models, ", "))
-
-	os.WriteFile(filepath.Join(outPath, "CLAUDE.md"), []byte(claudeMd), 0644)
-
-	return nil
-}
-
-func routeToHandlerName(method, path string) string {
-	// /api/users/:id -> handleGetUsersById
-	path = strings.ReplaceAll(path, "/", " ")
-	path = strings.ReplaceAll(path, ":", "By")
-	path = strings.ReplaceAll(path, "-", " ")
-	path = strings.ReplaceAll(path, "_", " ")
-
-	words := strings.Fields(path)
-	name := "handle" + strings.Title(strings.ToLower(method))
-	for _, w := range words {
-		if w == "api" {
-			continue
-		}
-		name += strings.Title(w)
-	}
-
-	return name
-}
-
-func contains(slice []string, item string) bool {
-	for _, s := range slice {
-		if s == item {
-			return true
-		}
-	}
-	return false
 }

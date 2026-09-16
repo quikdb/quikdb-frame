@@ -200,17 +200,23 @@ fails closed instead of silently building with the wrong context.
 
 ## Convert Existing Apps
 
-The current Express/Flask command scans routes and generates a migration scaffold with
-handler stubs. It does **not** preserve existing business logic. Review and implement every
-handler before use; automatic conversion will be released only for independently tested subsets.
+Conversion is always opt-in. The first pilot supports one fail-closed subset: Express 4.21.2 on
+Node 20 with a single CommonJS entrypoint, fixed routes, constant JSON/string responses and
+bounded static assets. It generates real response behavior, never handler stubs. Dynamic or
+ambiguous applications are rejected and continue through the existing as-is deployment path.
 
 ```bash
-quikdb-frame convert ./my-express-app --from express
-
-# Output contains handler stubs that require manual implementation.
+quikdb-frame convert ./my-express-app --from express --json
+quikdb-frame convert ./my-express-app --from express --output ./my-express-app-frame --apply
 ```
 
-Route-scaffold scanners: Express and Flask. Other framework converters in SPEC.md are planned.
+Planning is the default and writes nothing. `--apply` is required to create a native Go/scratch
+Frame project. The output includes a deterministic review plan, source hashes, blank environment
+declarations and an as-is Node manifest for rollback. The original source is never modified.
+
+See the [Express conversion pilot](docs/EXPRESS_CONVERSION_PILOT.md) for the exact support matrix,
+rejection rules and hosted original-versus-converted response oracle. Flask and all other
+frameworks remain as-is only; the broader converter list in SPEC.md is a target, not shipped support.
 
 ## Built-in Integrations
 

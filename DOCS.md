@@ -80,8 +80,8 @@ The approved fixture device login, live concurrent refresh, original Node-v22 de
 repeat identity and stopped-app resume passed; both replicas live before cleanup. Fixture deleted,
 access/refresh revoked (401 verified), credential file cleared and temporary workspace removed.
 CLI build uses Go 1.27.1;
-keyring v0.2.6 and flock v0.13.0 are locked in go.mod/go.sum. Express/Flask conversion generates
-handler stubs and must not be treated as business-logic preservation. Core adapters and production API/web wiring need
+keyring v0.2.6 and flock v0.13.0 are locked in go.mod/go.sum. Historical Express/Flask handler
+stub generation was removed on the conversion-pilot branch. Core adapters and production API/web wiring need
 the subsequent work packages. No managed databases have been provisioned by this change.
 
 ## Recent changes
@@ -121,3 +121,18 @@ CLI manifest validate --file quikdb.json --json runs offline and reports metadat
 Remote qualification: d287a76 full34846859517/native34846859537 passed, public schema39 cases and real macOS/Windows checks passed. API d08f609 shared pinned contracts plus nine suites/186 tests34846944145 passed; production rollout pending. Published-platform workflow can opt into actual offline manifest success/unsupported-version rejection on all three OSes after the tagged release.
 
 Final runtime de867b723832f5f681c5c02c9c6665450094cbd0 passed full/native34847304717/34847304730 and main34847715726. Tagged v0.1.15 signed release34847937129 passed. Actual published Linux/macOS/Windows34848153626 passed checksum/provenance/version/self-upgrade plus offline manifest success and sanitized unsupported-version rejection; manifest input enabled for all jobs. Linux x64 checksum7403e5e5508721bab9cd018e8648219265e0b24ddd5707746f23ff41197f886b. API prerequisite deployed generation248/two ready. Offline checks need no fixture session; fresh authenticated live remains separate.
+
+## Express static-response conversion pilot — draft
+
+`express-static-v1` replaces the old route-stub path with one bounded converter. Planning is
+side-effect-free by default and `--apply` is explicit. The accepted matrix is exact Express
+4.21.2 on Node 20, one CommonJS entrypoint, fixed literal routes/responses and bounded static
+mounts. Unknown statements, request-dependent logic, extra server source/dependencies,
+middleware, state and other frameworks fail closed with the as-is path retained.
+
+Applied output is atomic and deterministic: a native Go/scratch Frame service, source-hashed
+review plan, names-only environment template and original Node startup/deployment manifest.
+The original source is not modified. Hosted qualification compares original and converted status,
+content type and body bytes for the fixture oracles, asset bytes, deterministic output, rejection
+fixtures, generated builds and container image size. This branch is unreleased and does not enable
+deployment-time conversion in the API/dashboard. See docs/EXPRESS_CONVERSION_PILOT.md.
