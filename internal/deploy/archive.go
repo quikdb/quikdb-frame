@@ -12,6 +12,7 @@ import (
 	"io"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -206,47 +207,65 @@ func packageSource(ctx context.Context, directory string) (_ *sourceArchive, err
 }
 
 func (c *APIClient) uploadSource(ctx context.Context, token string, archive *sourceArchive) (string, error) {
-	if c.TokenProvider != nil {
-		current, err := c.TokenProvider()
+	uploadHTTP := *c.HTTP
+	uploadHTTP.Timeout = 2 * time.Minute
+	for attempt := 0; attempt < 2; attempt++ {
+		if c.TokenProvider != nil {
+			current, err := c.TokenProvider()
+			if err != nil {
+				return "", err
+			}
+			token = current
+		}
+		if _, err := archive.File.Seek(0, io.SeekStart); err != nil {
+			return "", err
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+"/api/v1/deployment/sources", io.LimitReader(archive.File, archive.Size))
 		if err != nil {
 			return "", err
 		}
-		token = current
+		req.ContentLength = archive.Size
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "application/gzip")
+		req.Header.Set("X-QuikDB-Source-SHA256", archive.SHA256)
+		response, err := uploadHTTP.Do(req)
+		if err != nil {
+			if attempt == 0 && ctx.Err() == nil {
+				continue
+			}
+			return "", fmt.Errorf("source upload response unavailable; check the dashboard before retrying")
+		}
+		raw, readErr := io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
+		response.Body.Close()
+		if (response.StatusCode == http.StatusTooManyRequests || response.StatusCode >= 500) && attempt == 0 && ctx.Err() == nil {
+			continue
+		}
+		if readErr != nil || len(raw) > 64<<10 {
+			return "", fmt.Errorf("invalid source upload response")
+		}
+		if response.StatusCode != http.StatusCreated && response.StatusCode != http.StatusOK {
+			return "", fmt.Errorf("source upload failed (%d); check authentication, account limits and archive size", response.StatusCode)
+		}
+		var result struct {
+			Success bool `json:"success"`
+			Data    struct {
+				ID     string `json:"sourceId"`
+				SHA256 string `json:"sha256"`
+				Size   int64  `json:"size"`
+			} `json:"data"`
+		}
+		if json.Unmarshal(raw, &result) != nil || !result.Success || !sourceIDPattern.MatchString(result.Data.ID) || result.Data.SHA256 != archive.SHA256 || result.Data.Size != archive.Size {
+			return "", fmt.Errorf("source upload receipt does not match the packaged application")
+		}
+		return result.Data.ID, nil
 	}
-	if _, err := archive.File.Seek(0, io.SeekStart); err != nil {
-		return "", err
+	return "", fmt.Errorf("source upload was not confirmed")
+}
+
+func (c *APIClient) releaseSource(ctx context.Context, token, sourceID string) error {
+	if !sourceIDPattern.MatchString(sourceID) {
+		return fmt.Errorf("invalid source handle")
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+"/api/v1/deployment/sources", io.LimitReader(archive.File, archive.Size))
-	if err != nil {
-		return "", err
-	}
-	req.ContentLength = archive.Size
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/gzip")
-	uploadHTTP := *c.HTTP
-	uploadHTTP.Timeout = 2 * time.Minute
-	response, err := uploadHTTP.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("source upload response unavailable; no automatic retry or deployment was submitted")
-	}
-	defer response.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
-	if err != nil || len(raw) > 64<<10 {
-		return "", fmt.Errorf("invalid source upload response")
-	}
-	if response.StatusCode != http.StatusCreated {
-		return "", fmt.Errorf("source upload failed (%d); check authentication, account limits and archive size", response.StatusCode)
-	}
-	var result struct {
-		Success bool `json:"success"`
-		Data    struct {
-			ID     string `json:"sourceId"`
-			SHA256 string `json:"sha256"`
-			Size   int64  `json:"size"`
-		} `json:"data"`
-	}
-	if json.Unmarshal(raw, &result) != nil || !result.Success || !sourceIDPattern.MatchString(result.Data.ID) || result.Data.SHA256 != archive.SHA256 || result.Data.Size != archive.Size {
-		return "", fmt.Errorf("source upload receipt does not match the packaged application")
-	}
-	return result.Data.ID, nil
+	_, err := c.request(ctx, token, http.MethodDelete, "/sources/"+url.PathEscape(sourceID), nil)
+	return err
 }
