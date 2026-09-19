@@ -166,3 +166,25 @@ immutable API authority and compatible application runners. Those flags remain o
 binary therefore supports offline package review while a non-dry-run request fails at server
 capability preflight before upload. Signed Linux/macOS/Windows assets and their actual offline
 behaviors are release gates.
+
+## Managed database commands
+
+The `db` command uses the authenticated QuikDB API and never receives or prints a provider, host,
+username, password or database URL.
+
+- `db list` lists the account's databases.
+- `db tables <id>` lists user tables.
+- `db connect <id>` opens an interactive SQL shell through QuikDB; `\\dt` lists tables and `\\q`
+  exits.
+- `db query <id> --file query.sql` or `--stdin` runs one bounded command without placing SQL in the
+  process list.
+- `db dump <id> --output dump.sql` creates a new mode-0600 portable SQL file and refuses to replace
+  an existing file.
+- `db migrate <id> --source-env SOURCE_DATABASE_URL` migrates a public TLS PostgreSQL source without
+  putting its credential in command arguments. `--file dump.sql` imports a bounded SQL file.
+
+New logins explicitly request `compute:databases`. Device API limits that permission to listing,
+table browsing, SQL, import and export; it does not grant database creation, billing, credential
+rotation or deletion. Migration commands wait on the durable server operation and clearly report
+that it continues if the local wait is interrupted. Existing CLI sessions must log out and sign in
+again before using `db`.

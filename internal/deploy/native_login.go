@@ -102,7 +102,7 @@ func Login() error {
 	defer stop()
 	ctx, cancel := context.WithTimeout(interruptCtx, 5*time.Minute)
 	defer cancel()
-	grant, err := startGrant(ctx, map[string]interface{}{"mode": "browser", "scopes": []string{"compute:deployments", "compute:environment", "compute:domains"}, "challenge": pkceChallenge(verifier), "state": state, "callback": "http://" + host + "/callback"})
+	grant, err := startGrant(ctx, map[string]interface{}{"mode": "browser", "scopes": []string{"compute:deployments", "compute:environment", "compute:domains", "compute:databases"}, "challenge": pkceChallenge(verifier), "state": state, "callback": "http://" + host + "/callback"})
 	if err != nil {
 		return err
 	}
@@ -133,7 +133,7 @@ func LoginDevice() error {
 	defer stop()
 	ctx, cancel := context.WithTimeout(interruptCtx, 5*time.Minute)
 	defer cancel()
-	grant, err := startGrant(ctx, map[string]interface{}{"mode": "device", "scopes": []string{"compute:deployments", "compute:environment", "compute:domains"}, "challenge": pkceChallenge(verifier)})
+	grant, err := startGrant(ctx, map[string]interface{}{"mode": "device", "scopes": []string{"compute:deployments", "compute:environment", "compute:domains", "compute:databases"}, "challenge": pkceChallenge(verifier)})
 	if err != nil {
 		return err
 	}
