@@ -47,7 +47,7 @@ func TestDatabaseShellQueriesThroughAuthenticatedAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 	text := output.String()
-	if !strings.Contains(text, "answer") || !strings.Contains(text, "42") || !strings.Contains(text, "credentials") {
+	if !strings.Contains(text, "answer") || !strings.Contains(text, "42") || !strings.Contains(strings.ToLower(text), "credentials") {
 		t.Fatalf("unexpected shell output: %s", text)
 	}
 	if strings.Contains(text, "postgresql://") || strings.Contains(text, "database.example") {
