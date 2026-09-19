@@ -145,6 +145,23 @@ failures do not fall back to plaintext. `QUIKDB_FRAME_CONFIG_DIR` can select an 
 fallback/lock directory for a headless workspace; it does not change the desktop keyring account.
 Older unverified/expired saved tokens require a new login.
 
+### Managed databases
+
+```text
+quikdb-frame db list
+quikdb-frame db tables <database-id>
+quikdb-frame db connect <database-id>
+quikdb-frame db query <database-id> --file query.sql
+quikdb-frame db dump <database-id> --output backup.sql
+SOURCE_DATABASE_URL='postgresql://…' quikdb-frame db migrate <database-id> --source-env SOURCE_DATABASE_URL
+quikdb-frame db migrate <database-id> --file backup.sql
+```
+
+These commands connect through QuikDB. The CLI never receives or prints the underlying provider,
+host or credential. Source URLs use an environment variable so they do not enter shell history or
+the process list. New logins request a separate managed-database permission; older sessions must
+log out and sign in again before using these commands. Database deletion and billing are excluded.
+
 For an existing verified user token in CI, supply `QUIKDB_TOKEN` through your CI secret store;
 commands verify it without saving it. A dedicated scoped CI-token lifecycle is still planned.
 Never put tokens in URLs or commit them. Node/operator tokens belong to the separate node CLI.

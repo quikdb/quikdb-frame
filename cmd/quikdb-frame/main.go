@@ -118,6 +118,12 @@ func main() {
 			os.Exit(1)
 		}
 
+	case "db":
+		if err := deploy.DatabaseCommand(os.Args[2:]); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
+
 	case "whoami":
 		if err := deploy.Whoami(); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -176,6 +182,12 @@ Commands:
   resources get|set <id>    Read allocation or set --cpu and/or --ram (MB)
   env list|set|remove|export <id>  Manage env; set requires KEY --value-file or --stdin
   domains list|add|remove|verify|repair <id>  Manage app domains, subject to plan limits
+  db list                  List your managed databases
+  db tables <id>           List tables without exposing connection details
+  db connect <id>          Open an authenticated SQL shell through QuikDB
+  db query <id> --file <sql>|--stdin  Run one SQL command
+  db dump <id> --output <file>        Export portable SQL to a private file
+  db migrate <id> --source-env <name>|--file <dump.sql>  Import into an empty database
   whoami                   Show authenticated account and plan
   convert <path> --from express      Plan a bounded conversion; --apply writes it
   upgrade                  Upgrade to the latest version
