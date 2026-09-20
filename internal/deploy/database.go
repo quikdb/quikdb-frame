@@ -190,9 +190,13 @@ func (c *APIClient) databaseQuery(ctx context.Context, token, id, sql string) (d
 
 func (c *APIClient) waitDatabaseMigration(ctx context.Context, token, databaseID, migrationID string, pollInterval time.Duration) (databaseMigration, error) {
 	path := "/api/v1/managed-databases/" + url.PathEscape(databaseID) + "/migrations/" + url.PathEscape(migrationID)
+	var current databaseMigration
 	for {
 		raw, _, err := c.databaseRequest(ctx, token, http.MethodGet, path, "", nil)
 		if err != nil {
+			if ctx.Err() != nil {
+				return current, fmt.Errorf("stopped waiting: %w; migration continues on QuikDB", ctx.Err())
+			}
 			return databaseMigration{}, err
 		}
 		data, err := databaseEnvelope[struct {
@@ -201,6 +205,7 @@ func (c *APIClient) waitDatabaseMigration(ctx context.Context, token, databaseID
 		if err != nil {
 			return databaseMigration{}, err
 		}
+		current = data.Migration
 		switch data.Migration.State {
 		case "succeeded":
 			return data.Migration, nil
