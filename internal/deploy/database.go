@@ -12,12 +12,46 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
 	"strings"
 	"text/tabwriter"
 	"time"
 )
 
 const databaseBodyLimit = 4 << 20
+
+var (
+	databaseConnectionURL = regexp.MustCompile(`(?i)\b(?:postgres(?:ql)?|mysql|mongodb(?:\+srv)?|redis(?:s)?|cockroachdb)://[^\s"'<>]+`)
+	databaseURLUserInfo   = regexp.MustCompile(`(?i)\bhttps?://[^\s/@:]+:[^\s/@]+@[^\s"'<>]+`)
+	databaseSecretValue   = regexp.MustCompile(`(?i)\b(password|passwd|pwd|secret|token|api[_-]?key|authorization|credential|connection[_-]?(?:string|url)|database[_-]?url|username|user|host)\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;]+)`)
+	databaseOpaqueSecret  = regexp.MustCompile(`\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9]{20,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b`)
+)
+
+type redactedDatabaseError struct {
+	cause   error
+	message string
+}
+
+func (e *redactedDatabaseError) Error() string { return e.message }
+func (e *redactedDatabaseError) Unwrap() error { return e.cause }
+
+func redactDatabaseText(value string) string {
+	value = databaseURLUserInfo.ReplaceAllString(value, "[REDACTED_URL]")
+	value = databaseConnectionURL.ReplaceAllString(value, "[REDACTED_DATABASE_URL]")
+	value = databaseSecretValue.ReplaceAllString(value, "$1=[REDACTED]")
+	return databaseOpaqueSecret.ReplaceAllString(value, "[REDACTED_SECRET]")
+}
+
+func safeDatabaseError(err error) error {
+	if err == nil {
+		return nil
+	}
+	message := redactDatabaseText(err.Error())
+	if message == err.Error() {
+		return err
+	}
+	return &redactedDatabaseError{cause: err, message: message}
+}
 
 type managedDatabase struct {
 	DatabaseID    string `json:"databaseId"`
@@ -61,7 +95,7 @@ func (c *APIClient) databaseRequest(ctx context.Context, token, method, path, co
 	if c.TokenProvider != nil {
 		current, err := c.TokenProvider()
 		if err != nil {
-			return nil, "", fmt.Errorf("database authentication: %w", err)
+			return nil, "", safeDatabaseError(fmt.Errorf("database authentication: %w", err))
 		}
 		token = current
 	}
@@ -82,7 +116,7 @@ func (c *APIClient) databaseRequest(ctx context.Context, token, method, path, co
 	client.Timeout = 130 * time.Second
 	response, err := client.Do(request)
 	if err != nil {
-		return nil, "", fmt.Errorf("database API request failed: %w", err)
+		return nil, "", safeDatabaseError(fmt.Errorf("database API request failed: %w", err))
 	}
 	defer response.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(response.Body, databaseBodyLimit+1))
@@ -105,7 +139,7 @@ func (c *APIClient) databaseRequest(ctx context.Context, token, method, path, co
 		if response.StatusCode == http.StatusUnauthorized {
 			message = "authentication expired or invalid; run quikdb-frame login"
 		}
-		return nil, "", fmt.Errorf("database API (%d): %s", response.StatusCode, message)
+		return nil, "", safeDatabaseError(fmt.Errorf("database API (%d): %s", response.StatusCode, message))
 	}
 	return raw, response.Header.Get("Content-Type"), nil
 }
@@ -154,11 +188,15 @@ func (c *APIClient) databaseQuery(ctx context.Context, token, id, sql string) (d
 	return databaseEnvelope[databaseQueryResult](raw)
 }
 
-func (c *APIClient) waitDatabaseMigration(ctx context.Context, token, databaseID, migrationID string) (databaseMigration, error) {
+func (c *APIClient) waitDatabaseMigration(ctx context.Context, token, databaseID, migrationID string, pollInterval time.Duration) (databaseMigration, error) {
 	path := "/api/v1/managed-databases/" + url.PathEscape(databaseID) + "/migrations/" + url.PathEscape(migrationID)
+	var current databaseMigration
 	for {
 		raw, _, err := c.databaseRequest(ctx, token, http.MethodGet, path, "", nil)
 		if err != nil {
+			if ctx.Err() != nil {
+				return current, fmt.Errorf("stopped waiting: %w; migration continues on QuikDB", ctx.Err())
+			}
 			return databaseMigration{}, err
 		}
 		data, err := databaseEnvelope[struct {
@@ -167,16 +205,17 @@ func (c *APIClient) waitDatabaseMigration(ctx context.Context, token, databaseID
 		if err != nil {
 			return databaseMigration{}, err
 		}
+		current = data.Migration
 		switch data.Migration.State {
 		case "succeeded":
 			return data.Migration, nil
 		case "failed":
-			return data.Migration, fmt.Errorf("migration failed safely (%s); the destination was left unchanged", data.Migration.ErrorCode)
+			return data.Migration, safeDatabaseError(fmt.Errorf("migration failed safely (%s); the destination was left unchanged", data.Migration.ErrorCode))
 		case "pending", "running":
 		default:
 			return data.Migration, fmt.Errorf("migration returned an unknown state")
 		}
-		timer := time.NewTimer(2 * time.Second)
+		timer := time.NewTimer(pollInterval)
 		select {
 		case <-ctx.Done():
 			timer.Stop()
@@ -184,6 +223,72 @@ func (c *APIClient) waitDatabaseMigration(ctx context.Context, token, databaseID
 		case <-timer.C:
 		}
 	}
+}
+
+type databaseOptions struct {
+	action, id, sqlFile, outputFile, sourceEnv string
+	jsonOutput, stdin                          bool
+}
+
+func parseDatabaseCommand(args []string) (databaseOptions, error) {
+	var options databaseOptions
+	if len(args) == 0 {
+		return options, fmt.Errorf("db requires list, tables, connect, query, dump or migrate")
+	}
+	options.action, args = args[0], args[1:]
+	flags := flag.NewFlagSet("db "+options.action, flag.ContinueOnError)
+	flags.SetOutput(io.Discard)
+	flags.BoolVar(&options.jsonOutput, "json", false, "JSON output")
+	flags.StringVar(&options.sqlFile, "file", "", "Read SQL from a file")
+	flags.BoolVar(&options.stdin, "stdin", false, "Read SQL from stdin")
+	flags.StringVar(&options.outputFile, "output", "", "Private output file")
+	flags.StringVar(&options.sourceEnv, "source-env", "", "Environment variable containing a source PostgreSQL URL")
+	ordered, err := managementArgs(flags, args)
+	if err != nil {
+		return options, err
+	}
+	if err = flags.Parse(ordered); err != nil {
+		return options, err
+	}
+	allowed := map[string]map[string]bool{
+		"list": {"json": true}, "tables": {"json": true}, "connect": {},
+		"query": {"json": true, "file": true, "stdin": true},
+		"dump":  {"output": true}, "migrate": {"source-env": true, "file": true},
+	}
+	validFlags, supported := allowed[options.action]
+	if !supported {
+		return options, fmt.Errorf("unsupported db command %s", options.action)
+	}
+	var unsupported string
+	flags.Visit(func(option *flag.Flag) {
+		if !validFlags[option.Name] {
+			unsupported = option.Name
+		}
+	})
+	if unsupported != "" {
+		return options, fmt.Errorf("db %s does not support --%s", options.action, unsupported)
+	}
+	positions := flags.Args()
+	wantID := options.action != "list"
+	if (wantID && len(positions) != 1) || (!wantID && len(positions) != 0) {
+		return options, fmt.Errorf("db %s received invalid arguments", options.action)
+	}
+	if wantID {
+		options.id = positions[0]
+		if !strings.HasPrefix(options.id, "db_") || !resourceID.MatchString(options.id) {
+			return options, fmt.Errorf("use an exact database ID")
+		}
+	}
+	if options.action == "query" && (options.sqlFile == "") == !options.stdin {
+		return options, fmt.Errorf("db query requires exactly one of --file or --stdin")
+	}
+	if options.action == "dump" && options.outputFile == "" {
+		return options, fmt.Errorf("db dump requires --output")
+	}
+	if options.action == "migrate" && (options.sourceEnv == "") == (options.sqlFile == "") {
+		return options, fmt.Errorf("db migrate requires exactly one of --source-env or --file")
+	}
+	return options, nil
 }
 
 func writeDatabaseRows(output io.Writer, result databaseQueryResult) error {
@@ -254,53 +359,9 @@ func databaseShell(ctx context.Context, client *APIClient, token, id string, inp
 }
 
 func DatabaseCommand(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("db requires list, tables, connect, query, dump or migrate")
-	}
-	action, args := args[0], args[1:]
-	flags := flag.NewFlagSet("db "+action, flag.ContinueOnError)
-	flags.SetOutput(io.Discard)
-	jsonOutput := flags.Bool("json", false, "JSON output")
-	sqlFile := flags.String("file", "", "Read SQL from a file")
-	stdin := flags.Bool("stdin", false, "Read SQL from stdin")
-	outputFile := flags.String("output", "", "Private output file")
-	sourceEnv := flags.String("source-env", "", "Environment variable containing a source PostgreSQL URL")
-	ordered, err := managementArgs(flags, args)
+	options, err := parseDatabaseCommand(args)
 	if err != nil {
-		return err
-	}
-	if err = flags.Parse(ordered); err != nil {
-		return err
-	}
-	allowed := map[string]map[string]bool{
-		"list": {"json": true}, "tables": {"json": true}, "connect": {},
-		"query": {"json": true, "file": true, "stdin": true},
-		"dump":  {"output": true}, "migrate": {"source-env": true, "file": true},
-	}
-	validFlags, supported := allowed[action]
-	if !supported {
-		return fmt.Errorf("unsupported db command %s", action)
-	}
-	var unsupported string
-	flags.Visit(func(option *flag.Flag) {
-		if !validFlags[option.Name] {
-			unsupported = option.Name
-		}
-	})
-	if unsupported != "" {
-		return fmt.Errorf("db %s does not support --%s", action, unsupported)
-	}
-	positions := flags.Args()
-	wantID := action != "list"
-	if (wantID && len(positions) != 1) || (!wantID && len(positions) != 0) {
-		return fmt.Errorf("db %s received invalid arguments", action)
-	}
-	id := ""
-	if wantID {
-		id = positions[0]
-		if !strings.HasPrefix(id, "db_") || !resourceID.MatchString(id) {
-			return fmt.Errorf("use an exact database ID")
-		}
+		return safeDatabaseError(err)
 	}
 	ctx, cancelSignal := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer cancelSignal()
@@ -308,49 +369,49 @@ func DatabaseCommand(args []string) error {
 	defer cancel()
 	token, err := RequireAuth()
 	if err != nil {
-		return err
+		return safeDatabaseError(err)
 	}
-	client := deployClientFactory()
+	return safeDatabaseError(executeDatabaseCommand(ctx, deployClientFactory(), token, options, os.Stdin, os.Stdout, 2*time.Second))
+}
 
-	switch action {
+func executeDatabaseCommand(ctx context.Context, client *APIClient, token string, options databaseOptions, input io.Reader, output io.Writer, pollInterval time.Duration) error {
+	switch options.action {
 	case "list":
 		databases, err := client.listDatabases(ctx, token)
 		if err != nil {
 			return err
 		}
-		if *jsonOutput {
-			return emitManagement(os.Stdout, true, databases)
+		if options.jsonOutput {
+			return emitManagement(output, true, databases)
 		}
 		if len(databases) == 0 {
-			_, err = fmt.Fprintln(os.Stdout, "No databases found.")
+			_, err = fmt.Fprintln(output, "No databases found.")
 			return err
 		}
 		for _, database := range databases {
-			fmt.Printf("%-24s %-12s PostgreSQL %s (ID: %s)\n", database.DisplayName, database.Status, database.EngineVersion, database.DatabaseID)
+			fmt.Fprintf(output, "%-24s %-12s PostgreSQL %s (ID: %s)\n", database.DisplayName, database.Status, database.EngineVersion, database.DatabaseID)
 		}
 		return nil
 	case "tables":
-		tables, err := client.listDatabaseTables(ctx, token, id)
+		tables, err := client.listDatabaseTables(ctx, token, options.id)
 		if err != nil {
 			return err
 		}
-		if *jsonOutput {
-			return emitManagement(os.Stdout, true, tables)
+		if options.jsonOutput {
+			return emitManagement(output, true, tables)
 		}
 		for _, table := range tables {
-			fmt.Printf("%s.%s\t%d rows\t%d bytes\n", table.Schema, table.Name, table.EstimatedRows, table.SizeBytes)
+			fmt.Fprintf(output, "%s.%s\t%d rows\t%d bytes\n", table.Schema, table.Name, table.EstimatedRows, table.SizeBytes)
 		}
 		return nil
 	case "connect":
-		return databaseShell(ctx, client, token, id, os.Stdin, os.Stdout)
+		return databaseShell(ctx, client, token, options.id, input, output)
 	case "query":
-		if (*sqlFile == "") == !*stdin {
-			return fmt.Errorf("db query requires exactly one of --file or --stdin")
-		}
-		var reader io.Reader = os.Stdin
+		var reader io.Reader = input
 		var file *os.File
-		if *sqlFile != "" {
-			file, err = os.Open(*sqlFile)
+		var err error
+		if options.sqlFile != "" {
+			file, err = os.Open(options.sqlFile)
 			if err != nil {
 				return err
 			}
@@ -361,23 +422,20 @@ func DatabaseCommand(args []string) error {
 		if err != nil {
 			return err
 		}
-		result, err := client.databaseQuery(ctx, token, id, string(raw))
+		result, err := client.databaseQuery(ctx, token, options.id, string(raw))
 		if err != nil {
 			return err
 		}
-		if *jsonOutput {
-			return emitManagement(os.Stdout, true, result)
+		if options.jsonOutput {
+			return emitManagement(output, true, result)
 		}
-		return writeDatabaseRows(os.Stdout, result)
+		return writeDatabaseRows(output, result)
 	case "dump":
-		if *outputFile == "" {
-			return fmt.Errorf("db dump requires --output")
-		}
-		file, err := os.OpenFile(*outputFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		file, err := createPrivateExport(options.outputFile)
 		if err != nil {
 			return err
 		}
-		raw, contentType, requestErr := client.databaseRequest(ctx, token, http.MethodGet, "/api/v1/managed-databases/"+url.PathEscape(id)+"/export.sql", "", nil)
+		raw, contentType, requestErr := client.databaseRequest(ctx, token, http.MethodGet, "/api/v1/managed-databases/"+url.PathEscape(options.id)+"/export.sql", "", nil)
 		if requestErr == nil && !strings.HasPrefix(contentType, "application/sql") {
 			requestErr = fmt.Errorf("unexpected database export response type")
 		}
@@ -386,31 +444,28 @@ func DatabaseCommand(args []string) error {
 		}
 		closeErr := file.Close()
 		if requestErr != nil {
-			_ = os.Remove(*outputFile)
+			_ = os.Remove(options.outputFile)
 			return requestErr
 		}
 		if closeErr != nil {
-			_ = os.Remove(*outputFile)
+			_ = os.Remove(options.outputFile)
 			return closeErr
 		}
-		fmt.Fprintf(os.Stdout, "Database export saved to %s\n", *outputFile)
+		fmt.Fprintf(output, "Database export saved to %s\n", options.outputFile)
 		return nil
 	case "migrate":
-		if (*sourceEnv == "") == (*sqlFile == "") {
-			return fmt.Errorf("db migrate requires exactly one of --source-env or --file")
-		}
-		path := "/api/v1/managed-databases/" + url.PathEscape(id)
+		path := "/api/v1/managed-databases/" + url.PathEscape(options.id)
 		var payload []byte
 		var contentType string
-		if *sourceEnv != "" {
-			source := os.Getenv(*sourceEnv)
+		if options.sourceEnv != "" {
+			source := os.Getenv(options.sourceEnv)
 			if source == "" {
 				return fmt.Errorf("source environment variable is empty")
 			}
 			payload, _ = json.Marshal(map[string]string{"connectionString": source})
 			contentType, path = "application/json", path+"/migrations"
 		} else {
-			file, err := os.Open(*sqlFile)
+			file, err := os.Open(options.sqlFile)
 			if err != nil {
 				return err
 			}
@@ -439,18 +494,18 @@ func DatabaseCommand(args []string) error {
 			}
 			return err
 		}
-		fmt.Fprintf(os.Stdout, "Migration %s accepted; waiting for completion.\n", accepted.Migration.MigrationID)
-		completed, err := client.waitDatabaseMigration(ctx, token, id, accepted.Migration.MigrationID)
+		fmt.Fprintf(output, "Migration %s accepted; waiting for completion.\n", accepted.Migration.MigrationID)
+		completed, err := client.waitDatabaseMigration(ctx, token, options.id, accepted.Migration.MigrationID, pollInterval)
 		if err != nil {
 			return err
 		}
 		if completed.Result != nil && completed.SourceType == "connection" {
-			_, err = fmt.Fprintf(os.Stdout, "Migration completed: %d tables, %d rows.\n", completed.Result.TableCount, completed.Result.RowCount)
+			_, err = fmt.Fprintf(output, "Migration completed: %d tables, %d rows.\n", completed.Result.TableCount, completed.Result.RowCount)
 		} else {
-			_, err = fmt.Fprintln(os.Stdout, "Migration completed.")
+			_, err = fmt.Fprintln(output, "Migration completed.")
 		}
 		return err
 	default:
-		return fmt.Errorf("unsupported db command %s", action)
+		return fmt.Errorf("unsupported db command %s", options.action)
 	}
 }

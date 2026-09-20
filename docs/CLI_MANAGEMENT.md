@@ -110,3 +110,10 @@ retain deployment-only permission, including after refresh. To use environment o
 commands with an older session, run `quikdb-frame logout`, then `quikdb-frame login`
 (or `login --device`) and approve the displayed permissions. These human CLI permissions
 are separate from the planned agent infrastructure and application-data permissions.
+
+From version 0.1.17, the same browser or device grant also requests `compute:databases` alongside
+deployment, environment and domain scopes. Compute requires approval of the exact requested list;
+the resulting human CLI session therefore carries every accepted scope rather than a database-only
+token. Device API still requires `compute:databases` independently on list, browse, query, import
+and export routes. Existing sessions do not gain it during refresh and must log out and sign in
+again. Database creation, billing, credential rotation and deletion remain outside this scope.
