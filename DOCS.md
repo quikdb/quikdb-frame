@@ -178,13 +178,28 @@ username, password or database URL.
   exits.
 - `db query <id> --file query.sql` or `--stdin` runs one bounded command without placing SQL in the
   process list.
-- `db dump <id> --output dump.sql` creates a new mode-0600 portable SQL file and refuses to replace
-  an existing file.
+- `db dump <id> --output dump.sql` creates a new mode-0600 portable SQL file on POSIX or a protected
+  current-user-only file on Windows, refuses to replace an existing file and removes a reserved
+  output after any failed export.
 - `db migrate <id> --source-env SOURCE_DATABASE_URL` migrates a public TLS PostgreSQL source without
-  putting its credential in command arguments. `--file dump.sql` imports a bounded SQL file.
+  putting its credential in command arguments. Read the value with a silent shell prompt, export it
+  only for the command and unset it immediately; do not put the literal URL in command history.
+  `--file dump.sql` imports a bounded SQL file. Database API and command errors redact connection
+  URLs, credential assignments and common opaque secret forms before display.
 
-New logins explicitly request `compute:databases`. Device API limits that permission to listing,
-table browsing, SQL, import and export; it does not grant database creation, billing, credential
-rotation or deletion. Migration commands wait on the durable server operation and clearly report
-that it continues if the local wait is interrupted. Existing CLI sessions must log out and sign in
-again before using `db`.
+New browser and device logins request `compute:databases` in the same grant as `compute:deployments`,
+`compute:environment` and `compute:domains`; Compute requires explicit approval of that exact scope
+list. Device API independently limits `compute:databases` to listing, table browsing, SQL, import
+and export. It does not grant database creation, billing, credential rotation or deletion.
+Migration commands wait on the durable server operation and clearly report that it continues if
+the local wait is interrupted. Existing CLI sessions must log out and sign in again before using
+`db`.
+
+## v0.1.18 database CLI hardening
+
+The patch release routes database dumps through the shared cross-platform private-export primitive,
+adds client-side error redaction, and replaces inline connection-string examples with a silent
+prompt workflow. Hosted tests exercise command parsing, bounded queries, exclusive dump creation,
+failure cleanup, SQL-file migration, mutation non-retry, polling completion/deadlines and the
+Windows protected DACL used by an actual database dump. No live external migration is part of this
+hardening release.

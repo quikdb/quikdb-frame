@@ -153,14 +153,29 @@ quikdb-frame db tables <database-id>
 quikdb-frame db connect <database-id>
 quikdb-frame db query <database-id> --file query.sql
 quikdb-frame db dump <database-id> --output backup.sql
-SOURCE_DATABASE_URL='postgresql://…' quikdb-frame db migrate <database-id> --source-env SOURCE_DATABASE_URL
 quikdb-frame db migrate <database-id> --file backup.sql
 ```
 
+For a connection-string migration in bash or zsh, read the disposable source URL without echoing
+it or placing it in shell history, then remove it from the environment immediately after use:
+
+```bash
+printf 'Disposable public TLS PostgreSQL URL: '
+IFS= read -r -s SOURCE_DATABASE_URL
+printf '\n'
+export SOURCE_DATABASE_URL
+quikdb-frame db migrate <empty-database-id> --source-env SOURCE_DATABASE_URL
+unset SOURCE_DATABASE_URL
+```
+
 These commands connect through QuikDB. The CLI never receives or prints the underlying provider,
-host or credential. Source URLs use an environment variable so they do not enter shell history or
-the process list. New logins request a separate managed-database permission; older sessions must
-log out and sign in again before using these commands. Database deletion and billing are excluded.
+host or managed credential. Source URLs are sent in the protected request body and are defensively
+redacted from CLI errors. Environment variables can still be inspected by sufficiently privileged
+local processes, so use a disposable source credential and unset it promptly. New logins request
+`compute:databases` together with the standard deployment, environment and domain scopes. Compute
+displays the requested permissions for explicit approval, and Device API independently enforces
+`compute:databases` on database routes. Older sessions must log out and sign in again before using
+these commands. Database deletion and billing are excluded.
 
 For an existing verified user token in CI, supply `QUIKDB_TOKEN` through your CI secret store;
 commands verify it without saving it. A dedicated scoped CI-token lifecycle is still planned.
